@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Harness — AI Dev Tim</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --border:#2a2f3f;
+    --text:#e8eaf0; --muted:#8b91a5; --accent:#6c8cff; --accent2:#8b6cff;
+    --ok:#3ecf8e; --warn:#f5b14c; --err:#ff6b6b; --qa:#4cc9f0;
+    font-size:15px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:ui-sans-serif,system-ui,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  h1{font-size:1.25rem;margin:0}
+  h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
+  header{display:flex;align-items:center;gap:12px;padding:14px 22px;border-bottom:1px solid var(--border);background:var(--panel)}
+  header .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:grid;place-items:center;font-weight:800;font-size:15px;color:#fff}
+  header .sub{color:var(--muted);font-size:.8rem}
+  main{display:grid;grid-template-columns:360px 1fr;gap:16px;padding:16px 22px;max-width:1600px;margin:0 auto}
+  @media(max-width:980px){main{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+  label{display:block;font-size:.78rem;color:var(--muted);margin:10px 0 4px}
+  input[type=text],input[type=password],input[type=email],input[type=number],select,textarea{
+    width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+    padding:8px 10px;font-size:.88rem;font-family:inherit}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--accent)}
+  textarea{resize:vertical;min-height:90px}
+  .counts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+  .stepper{display:flex;align-items:center;background:var(--panel2);border:1px solid var(--border);border-radius:8px}
+  .stepper button{flex:0 0 30px;height:34px;background:none;border:none;color:var(--accent);font-size:1.1rem;cursor:pointer}
+  .stepper input{border:none;background:none;text-align:center;width:100%;padding:6px 0;color:var(--text);font-weight:600}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  button.primary{width:100%;margin-top:14px;padding:11px;border:none;border-radius:9px;font-weight:700;font-size:.95rem;cursor:pointer;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  button.primary:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;cursor:pointer;font-size:.82rem}
+  button.danger{background:#3a1f27;border:1px solid #5c2e3a;color:var(--err)}
+  details{border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:10px}
+  summary{cursor:pointer;font-size:.82rem;color:var(--muted)}
+  .radio-group{display:flex;gap:6px;margin-top:4px}
+  .radio-group label{flex:1;margin:0;text-align:center;padding:7px 4px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:.78rem;color:var(--muted)}
+  .radio-group input{display:none}
+  .radio-group label:has(input:checked){border-color:var(--accent);color:var(--text);background:rgba(108,140,255,.12)}
+  .pathbox{display:flex;gap:8px;align-items:center}
+  .pathbox .path{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:.75rem;color:var(--muted);
+    font-family:ui-monospace,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:rtl;text-align:left}
+  .pathbox .path.set{color:var(--text)}
+  .pathbox button{flex:none}
+  /* right side */
+  .right{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .agents{display:flex;flex-wrap:wrap;gap:10px}
+  .agent{background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;min-width:150px;flex:1;max-width:230px}
+  .agent .name{font-weight:700;font-size:.86rem;display:flex;align-items:center;gap:7px}
+  .agent .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+  .agent.working .dot{background:var(--ok);animation:pulse 1.1s infinite}
+  .agent .st{font-size:.75rem;color:var(--muted);margin-top:4px}
+  @keyframes pulse{50%{opacity:.35}}
+  .rolebadge{font-size:.62rem;padding:2px 7px;border-radius:20px;margin-left:auto}
+  .r-programmer{background:rgba(108,140,255,.18);color:var(--accent)}
+  .r-reviewer{background:rgba(245,177,76,.16);color:var(--warn)}
+  .r-qa{background:rgba(76,201,240,.16);color:var(--qa)}
+  /* plan approval */
+  #planPanel{border-color:rgba(245,177,76,.5)}
+  .plantask{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px}
+  .plantask .row input{font-weight:600}
+  .plantask textarea{margin-top:6px;min-height:0}
+  .plantask .num{flex:0 0 26px;display:grid;place-items:center;color:var(--muted);font-size:.78rem}
+  .plantask button{flex:0 0 34px}
+  .planwait{display:flex;align-items:center;gap:10px;color:var(--warn);font-size:.85rem}
+  .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--warn);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* board */
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;min-height:120px}
+  @media(max-width:1200px){.board{grid-template-columns:repeat(2,1fr)}}
+  .col h3{font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;display:flex;justify-content:space-between}
+  .card{background:var(--panel2);border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:8px;padding:9px 10px;margin-bottom:8px;font-size:.8rem;cursor:pointer}
+  .card .meta{color:var(--muted);font-size:.68rem;margin-top:5px;display:flex;gap:8px;flex-wrap:wrap}
+  .card.s-coding{border-left-color:var(--accent)}
+  .card.s-in_review{border-left-color:var(--warn)}
+  .card.s-in_qa{border-left-color:var(--qa)}
+  .card.s-needs_fix{border-left-color:var(--err)}
+  .card.s-done{border-left-color:var(--ok);opacity:.85}
+  .card.s-stuck{border-left-color:var(--err);background:#2a1c22}
+  /* log */
+  .log{background:#0c0e14;border:1px solid var(--border);border-radius:10px;height:260px;overflow-y:auto;padding:10px 12px;font-family:ui-monospace,Consolas,monospace;font-size:.74rem;line-height:1.55}
+  .log .t{color:#525a70;margin-right:8px}
+  .log .a{color:var(--accent);margin-right:6px;font-weight:600}
+  .banner{display:none;padding:14px 16px;border-radius:10px;background:rgba(62,207,142,.12);border:1px solid rgba(62,207,142,.4);color:var(--ok);font-weight:600}
+  .banner.err{background:rgba(255,107,107,.1);border-color:rgba(255,107,107,.4);color:var(--err)}
+  .statusline{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--muted)}
+  .statusline .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
+  .statusline.on .dot{background:var(--ok);animation:pulse 1.2s infinite}
+  .statusline.plan .dot{background:var(--warn);animation:pulse 1.2s infinite}
+  dialog{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;max-width:720px;width:90%;padding:18px}
+  dialog::backdrop{background:rgba(0,0,0,.6)}
+  dialog pre{white-space:pre-wrap;background:var(--panel2);padding:10px;border-radius:8px;font-size:.75rem;max-height:50vh;overflow:auto}
+  .hint{font-size:.72rem;color:var(--muted);margin-top:6px;line-height:1.5}
+  /* dir picker */
+  #dirDialog{max-width:560px}
+  .dirpath{font-family:ui-monospace,Consolas,monospace;font-size:.76rem;color:var(--accent);margin:8px 0;word-break:break-all}
+  .dirlist{border:1px solid var(--border);border-radius:8px;max-height:44vh;overflow-y:auto;background:var(--panel2)}
+  .diritem{padding:8px 12px;font-size:.84rem;cursor:pointer;border-bottom:1px solid var(--border)}
+  .diritem:last-child{border-bottom:none}
+  .diritem:hover{background:rgba(108,140,255,.12)}
+  .mockbadge{display:none;margin-top:10px;padding:8px 10px;border-radius:8px;font-size:.75rem;
+    background:rgba(245,177,76,.12);border:1px solid rgba(245,177,76,.4);color:var(--warn)}
+  /* project tabs */
+  .tabs{display:flex;gap:6px;padding:10px 22px 0;max-width:1600px;margin:0 auto;flex-wrap:wrap}
+  .tab{display:flex;align-items:center;gap:8px;padding:7px 14px;border:1px solid var(--border);border-radius:10px;
+    background:var(--panel2);cursor:pointer;font-size:.82rem;color:var(--muted);user-select:none}
+  .tab.active{background:var(--panel);color:var(--text);font-weight:600;border-color:var(--accent)}
+  .tab .tdot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+  .tab.running .tdot{background:var(--ok);animation:pulse 1.2s infinite}
+  .tab.plan .tdot{background:var(--warn);animation:pulse 1.2s infinite}
+  .tab .x{margin-left:2px}
+  .tab .x:hover{color:var(--err)}
+  .tab.add{border-style:dashed}
+  .diffview{background:#0c0e14;font-family:ui-monospace,Consolas,monospace;font-size:.72rem;line-height:1.5;
+    max-height:55vh;overflow:auto;border-radius:8px;padding:10px;white-space:pre-wrap;word-break:break-all}
+  .diffview .da{color:var(--ok)} .diffview .dd{color:var(--err)} .diffview .dh{color:var(--qa)}
+  .depsvg{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;margin-top:8px}
+  /* drag&drop */
+  .card[draggable="true"]{cursor:grab}
+  .agent.dropok{border-color:var(--accent);background:rgba(108,140,255,.14)}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">AH</div>
+  <div>
+    <h1>Agent Harness</h1>
+    <div class="sub">AI dev tim — team lead plan · odobrenje · paralelni programeri · review · QA</div>
+  </div>
+  <div class="statusline" id="statusline"><span id="cost" style="color:var(--ok);font-weight:600"></span><span class="dot"></span><span id="statustext">neaktivan</span></div>
+</header>
+
+<div class="tabs" id="tabs"></div>
+
+<main>
+  <!-- ===================== CONFIG ===================== -->
+  <section class="panel" id="configPanel">
+    <h2>Podešavanje tima</h2>
+    <div class="counts">
+      <div><label>Programeri</label><div class="stepper"><button data-t="programmers" data-d="-1">−</button><input id="programmers" value="2"><button data-t="programmers" data-d="1">+</button></div></div>
+      <div><label>Team Lead</label><div class="stepper"><button data-t="reviewers" data-d="-1">−</button><input id="reviewers" value="1"><button data-t="reviewers" data-d="1">+</button></div></div>
+      <div><label>QA</label><div class="stepper"><button data-t="qa" data-d="-1">−</button><input id="qa" value="1"><button data-t="qa" data-d="1">+</button></div></div>
+    </div>
+
+    <label>Zadatak za tim <span style="color:#525a70">(cilj — team lead ga razbija na taskove)</span></label>
+    <textarea id="goal" placeholder="npr:
+Napravi TODO web aplikaciju: Node backend sa REST API-jem,
+frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
+
+    <label>Radni prostor</label>
+    <div class="radio-group">
+      <label><input type="radio" name="wsmode" value="new" checked>Novi projekat</label>
+      <label><input type="radio" name="wsmode" value="existing">Postojeći folder</label>
+      <label><input type="radio" name="wsmode" value="git">Git URL</label>
+    </div>
+    <div id="wsNewWrap">
+      <label>Lokacija novog projekta</label>
+      <div class="pathbox"><div class="path" id="wsNewLoc">…</div><button class="ghost" id="wsNewBrowse">📁 Izaberi</button></div>
+      <label>Ime projekta</label>
+      <input type="text" id="wsNewName" value="novi-projekat">
+    </div>
+    <div id="wsExistWrap" style="display:none">
+      <label>Folder projekta</label>
+      <div class="pathbox"><div class="path" id="wsExistLoc">(nije izabran)</div><button class="ghost" id="wsExistBrowse">📁 Izaberi</button></div>
+    </div>
+    <div id="wsGitWrap" style="display:none"><label>Git clone URL</label><input type="text" id="wsGit" placeholder="https://github.com/korisnik/repo.git"></div>
+
+    <label>Motor</label>
+    <div class="radio-group">
+      <label><input type="radio" name="engine" value="api" checked>⚡ Claude API (ključ)</label>
+      <label id="engineCCLabel"><input type="radio" name="engine" value="claude-code">💳 Claude Code (pretplata)</label>
+    </div>
+    <div class="hint" id="engineHint"></div>
+
+    <label>Modeli</label>
+    <label style="margin-top:6px">Programeri</label>
+    <select id="modelProgrammer"><option>učitavam…</option></select>
+    <label>Team Lead (plan + review)</label>
+    <select id="modelReviewer"><option>učitavam…</option></select>
+    <label>QA</label>
+    <select id="modelQa"><option>učitavam…</option></select>
+    <div class="mockbadge" id="mockBadge">⚠ MOCK mod — ANTHROPIC_API_KEY nije postavljen u .env na serveru. Tim se simulira bez pravih poziva.</div>
+
+    <details>
+      <summary>⚙ Napredno</summary>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="optFinalQa" checked style="width:auto">Završni integracioni QA celog projekta</label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optMergeApproval" style="width:auto">Traži moje odobrenje pre merge-a</label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optPrMode" style="width:auto">PR režim (git push + gh pr create)</label>
+      <div class="hint">PR režim zahteva git remote i gh CLI; taskovi se ne merge-uju lokalno pa se integracioni QA preskače.</div>
+    </details>
+
+    <details>
+      <summary>Email notifikacija (Resend)</summary>
+      <label>Pošalji na</label>
+      <input type="email" id="notifyEmail" placeholder="stefan@fintrox.rs">
+      <button class="ghost" id="testEmail" style="margin-top:8px">Pošalji test email</button>
+      <div class="hint">Slanje ide preko Resend API-ja (ključ je na serveru). Napomena: dok ne verifikuješ svoj domen na resend.com, Resend šalje samo na email vlasnika Resend naloga, sa adrese onboarding@resend.dev.</div>
+    </details>
+
+    <button class="primary" id="planBtn">🧠 Team lead: napravi plan</button>
+
+    <details style="margin-top:10px">
+      <summary>⚡ Solo agent (bez plana)</summary>
+      <label>Uloga</label>
+      <select id="soloRole">
+        <option value="programmer">👨‍💻 Programer — implementira zadatak</option>
+        <option value="reviewer">🔍 Team lead — code review / analiza</option>
+        <option value="qa">🧪 QA — testira projekat</option>
+      </select>
+      <div class="hint">Jedan agent, jedna epizoda — bez plana i review lanca. Koristi cilj/opis, radni prostor, motor i model te uloge iz podešavanja iznad. Programer radi direktno na main grani (izmene se komituju), team lead i QA daju izveštaj (+ email ako je unet).</div>
+      <button class="ghost" id="soloBtn" style="width:100%;margin-top:8px">▶ Pokreni solo agenta</button>
+    </details>
+
+    <button class="ghost danger" id="stopBtn" style="width:100%;margin-top:8px;display:none">■ Zaustavi</button>
+
+    <details style="margin-top:14px">
+      <summary>📜 Istorija runova</summary>
+      <div id="runsList" class="hint" style="margin-top:8px">(nema sačuvanih runova)</div>
+    </details>
+  </section>
+
+  <!-- ===================== LIVE ===================== -->
+  <section class="right">
+    <div class="banner" id="banner"></div>
+
+    <!-- Rate-limit pause: countdown + immediate resume -->
+    <div class="banner" id="pauseBar" style="background:rgba(255,196,0,.1);border-color:rgba(255,196,0,.45);color:var(--warn)">
+      <span id="pauseText"></span>
+      <button class="ghost" id="resumePauseBtn" style="margin-left:12px">▶ Nastavi odmah</button>
+      <div class="hint" style="font-weight:400;margin-top:6px">Ako si dopunio limit/tokene, ne moraš da čekaš — klikni Nastavi odmah. Prekinute epizode nastavljaju isti razgovor (--resume), ne kreću od nule.</div>
+    </div>
+
+    <!-- Interrupted runs found on disk after a server restart -->
+    <div class="banner" id="resumeBar" style="background:rgba(96,165,250,.1);border-color:rgba(96,165,250,.45);color:var(--text)">
+      <div style="margin-bottom:6px">⏯ Pronađen prekinut run (server je bio ugašen usred rada):</div>
+      <div id="resumeList"></div>
+    </div>
+
+    <button class="ghost" id="openWs" style="display:none">📂 Otvori projekat</button>
+
+    <!-- Plan approval -->
+    <div class="panel" id="planPanel" style="display:none">
+      <h2>📋 Predlog plana — čeka tvoje odobrenje</h2>
+      <div class="hint" id="planGoal"></div>
+      <div class="hint" id="planEstimate" style="color:var(--warn)"></div>
+      <div id="planList" style="margin-top:10px"></div>
+      <button class="ghost" id="planAdd">+ Dodaj task</button>
+      <button class="primary" id="approveBtn">✓ Odobri plan i pokreni tim</button>
+      <label>Primedbe (za novi plan)</label>
+      <textarea id="planFeedback" rows="2" style="min-height:0" placeholder="npr: spoji taskove 2 i 3, dodaj poseban task za testove…"></textarea>
+      <button class="ghost" id="replanBtn" style="width:100%;margin-top:8px">↺ Ponovi planiranje uz primedbe</button>
+    </div>
+
+    <div class="panel" id="planningPanel" style="display:none">
+      <div class="planwait"><div class="spinner"></div>Team lead analizira zadatak i pravi plan taskova…</div>
+    </div>
+
+    <div class="panel" id="steerPanel" style="display:none">
+      <h2>📣 Poruči timu (uživo)</h2>
+      <div class="row">
+        <select id="steerTarget" style="flex:0 0 160px"><option value="">Ceo tim</option></select>
+        <input type="text" id="steerMsg" placeholder="npr: koristi TypeScript strict; ne diraj css folder…">
+        <button class="ghost" id="steerSend" style="flex:0 0 auto">Pošalji</button>
+      </div>
+      <div class="hint">Direktiva se ubacuje u sledeću epizodu (celom timu ili izabranom tasku) i važi do kraja runa.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Agenti</h2>
+      <div class="agents" id="agents"><span style="color:var(--muted);font-size:.82rem">Zadaj cilj — team lead prvo pravi plan, pa tim kreće…</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Task board</h2>
+      <div id="depGraphWrap" style="display:none"><svg class="depsvg" id="depGraph"></svg></div>
+      <div class="board" id="board" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Live log</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="taskDialog"><div id="taskDialogBody"></div><button class="ghost" onclick="taskDialog.close()" style="margin-top:10px">Zatvori</button></dialog>
+
+<dialog id="dirDialog">
+  <h2 style="margin-bottom:4px">Izaberi folder</h2>
+  <div class="dirpath" id="dirPath"></div>
+  <div class="dirlist" id="dirList"></div>
+  <div class="row" style="margin-top:12px">
+    <button class="ghost" id="dirUp">⬆ Nadfolder</button>
+    <button class="ghost" id="dirHome">🏠 Home</button>
+    <button class="primary" id="dirChoose" style="margin-top:0">✓ Izaberi ovaj folder</button>
+  </div>
+  <button class="ghost" onclick="dirDialog.close()" style="margin-top:10px;width:100%">Otkaži</button>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const COLS = [
+  ['queued','U redu čekanja'], ['coding','Programiranje'], ['in_review','Code review'],
+  ['in_qa','QA testiranje'], ['done','Završeno'],
+];
+// needs_fix se prikazuje u koloni Programiranje (čeka programera), stuck u Završeno sa oznakom
+const COL_OF = { queued:'queued', coding:'coding', needs_fix:'coding', in_review:'in_review', in_qa:'in_qa', awaiting_merge:'in_qa', done:'done', stuck:'done' };
+const FALLBACK_MODELS = [
+  { id:'claude-sonnet-4-5', name:'Claude Sonnet 4.5 (fallback)' },
+  { id:'claude-haiku-4-5', name:'Claude Haiku 4.5 (fallback)' },
+  { id:'claude-opus-4-5', name:'Claude Opus 4.5 (fallback)' },
+];
+
+let state = { phase:'idle', agents: [], tasks: [], plan: null, goal: '' };
+let planDraft = null;   // editable copy of state.plan
+let sep = '/';
+let homeDir = '';
+let newLoc = '';        // chosen parent dir for a new project
+let existLoc = '';      // chosen existing project dir
+
+// ---------- steppers ----------
+document.querySelectorAll('.stepper button').forEach((b) => b.addEventListener('click', () => {
+  const inp = $(b.dataset.t);
+  const max = b.dataset.t === 'programmers' ? 10 : 5;
+  inp.value = Math.min(max, Math.max(1, (parseInt(inp.value) || 1) + Number(b.dataset.d)));
+}));
+
+// ---------- workspace mode ----------
+document.querySelectorAll('input[name=wsmode]').forEach((r) => r.addEventListener('change', () => {
+  applyWsMode(document.querySelector('input[name=wsmode]:checked').value);
+}));
+
+// ---------- models & engine ----------
+const CC_MODELS = [
+  { id: '', name: '(default iz Claude Code podešavanja)' },
+  { id: 'fable', name: 'Fable (najjači — brzo troši limit)' },
+  { id: 'opus', name: 'Opus' },
+  { id: 'sonnet', name: 'Sonnet' },
+  { id: 'haiku', name: 'Haiku' },
+];
+let apiModels = FALLBACK_MODELS;
+let apiMock = false;
+let apiKeyInvalid = false;
+let claudeCodeVer = null;
+
+function currentEngine() { return document.querySelector('input[name=engine]:checked').value; }
+
+function renderModelSelects() {
+  const cc = currentEngine() === 'claude-code';
+  const list = cc ? CC_MODELS : apiModels;
+  const pick = (substr) => (list.find((m) => m.id.includes(substr)) || list[0]).id;
+  for (const [selId, pref, ccDflt] of [['modelProgrammer','sonnet','sonnet'], ['modelReviewer','sonnet','sonnet'], ['modelQa','haiku','haiku']]) {
+    const sel = $(selId);
+    sel.innerHTML = list.map((m) => `<option value="${escAttr(m.id)}">${esc(m.name || m.id)}</option>`).join('');
+    sel.value = cc ? ccDflt : pick(pref);
+  }
+  $('mockBadge').style.display = !cc && apiMock ? 'block' : 'none';
+  $('engineHint').textContent = cc
+    ? 'Troši tokene iz tvoje claude.ai pretplate (Pro/Max) — ne API kredite. Pazi: paralelni programeri brzo troše 5-časovni limit plana.'
+    : apiKeyInvalid
+    ? '⚠ API ključ iz .env je NEVAŽEĆI (401) — API motor neće raditi. Generiši nov na console.anthropic.com ili koristi Claude Code motor.'
+    : (apiMock ? '' : 'Troši API kredite (pay-per-token) sa ključa iz .env.');
+}
+
+async function loadModels() {
+  let j = { mock:false, models: [], claudeCode: null };
+  try { j = await (await fetch('/api/models')).json(); } catch {}
+  apiModels = j.models && j.models.length ? j.models : FALLBACK_MODELS;
+  apiMock = !!j.mock;
+  apiKeyInvalid = !!j.apiKeyInvalid;
+  claudeCodeVer = j.claudeCode;
+  if (j.error) showBanner('Ne mogu da učitam listu modela: ' + j.error, true);
+  if (!claudeCodeVer) {
+    $('engineCCLabel').style.opacity = '.4';
+    $('engineCCLabel').querySelector('input').disabled = true;
+    $('engineCCLabel').title = 'Claude Code CLI nije pronađen na serveru';
+  }
+  // API engine unusable (no key / dead key) + Claude Code available → preselect it
+  if ((apiMock || apiKeyInvalid) && claudeCodeVer) {
+    document.querySelector('input[name=engine][value="claude-code"]').checked = true;
+  }
+  renderModelSelects();
+}
+document.querySelectorAll('input[name=engine]').forEach((r) => r.addEventListener('change', renderModelSelects));
+
+// ---------- directory picker ----------
+let dirCur = '', dirTarget = null; // 'new' | 'existing'
+async function loadDir(p) {
+  const r = await fetch('/api/fs' + (p ? '?path=' + encodeURIComponent(p) : ''));
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  dirCur = j.path; sep = j.sep; homeDir = j.home;
+  $('dirPath').textContent = j.path;
+  $('dirUp').disabled = !j.parent;
+  $('dirList').innerHTML = j.dirs.length
+    ? j.dirs.map((d) => `<div class="diritem" data-d="${escAttr(d)}">📁 ${esc(d)}</div>`).join('')
+    : '<div class="diritem" style="cursor:default;color:var(--muted)">(nema podfoldera)</div>';
+}
+$('dirList').addEventListener('click', (e) => {
+  const d = e.target.closest('.diritem')?.dataset.d;
+  if (d) loadDir(dirCur + (dirCur.endsWith(sep) ? '' : sep) + d);
+});
+$('dirUp').addEventListener('click', async () => {
+  const r = await fetch('/api/fs?path=' + encodeURIComponent(dirCur));
+  const j = await r.json();
+  if (j.parent) loadDir(j.parent);
+});
+$('dirHome').addEventListener('click', () => loadDir(homeDir));
+$('dirChoose').addEventListener('click', () => {
+  if (dirTarget === 'new') { newLoc = dirCur; $('wsNewLoc').textContent = dirCur; $('wsNewLoc').classList.add('set'); }
+  else { existLoc = dirCur; $('wsExistLoc').textContent = dirCur; $('wsExistLoc').classList.add('set'); }
+  dirDialog.close();
+});
+function openDirPicker(target) {
+  dirTarget = target;
+  loadDir(target === 'new' ? (newLoc || homeDir) : (existLoc || homeDir)).then(() => dirDialog.showModal());
+}
+$('wsNewBrowse').addEventListener('click', () => openDirPicker('new'));
+$('wsExistBrowse').addEventListener('click', () => openDirPicker('existing'));
+
+// ---------- sessions (project tabs) ----------
+let sessionsList = [];        // [{id, name}]
+let activeSession = 's1';
+const S = {};                 // id -> { state, planDraft, logEvents, form }
+
+function ensureS(id) {
+  S[id] = S[id] || {
+    state: { phase: 'idle', agents: [], tasks: [], plan: null, goal: '', usage: null, log: [] },
+    planDraft: null, logEvents: [], form: null,
+  };
+  return S[id];
+}
+
+function bindActive() {
+  state = ensureS(activeSession).state;
+  planDraft = S[activeSession].planDraft;
+}
+
+function renderTabs() {
+  $('tabs').innerHTML = sessionsList.map((s) => {
+    const p = S[s.id]?.state?.phase || 'idle';
+    const cls = p === 'running' ? 'running' : (p === 'planning' || p === 'awaiting_approval') ? 'plan' : '';
+    return `<div class="tab ${cls} ${s.id === activeSession ? 'active' : ''}" onclick="switchTab('${s.id}')">
+      <span class="tdot"></span>${esc(s.name)}
+      ${sessionsList.length > 1 ? `<span class="x" title="Zatvori projekat" onclick="event.stopPropagation();closeTab('${s.id}')">✕</span>` : ''}
+    </div>`;
+  }).join('') + `<div class="tab add" onclick="newTab()">＋ Novi projekat</div>`;
+}
+
+function saveForm(id) {
+  if (!S[id]) return;
+  S[id].form = {
+    goal: $('goal').value,
+    wsmode: document.querySelector('input[name=wsmode]:checked').value,
+    newLoc, newName: $('wsNewName').value, existLoc, git: $('wsGit').value,
+  };
+}
+
+function applyWsMode(v) {
+  document.querySelector(`input[name=wsmode][value="${v}"]`).checked = true;
+  $('wsNewWrap').style.display = v === 'new' ? '' : 'none';
+  $('wsExistWrap').style.display = v === 'existing' ? '' : 'none';
+  $('wsGitWrap').style.display = v === 'git' ? '' : 'none';
+}
+
+function restoreForm(id) {
+  const f = S[id]?.form;
+  $('goal').value = f ? f.goal : '';
+  applyWsMode(f ? f.wsmode : 'new');
+  newLoc = f ? f.newLoc : homeDir;
+  $('wsNewLoc').textContent = newLoc || '…';
+  $('wsNewLoc').classList.toggle('set', !!newLoc);
+  $('wsNewName').value = f ? f.newName : 'novi-projekat';
+  existLoc = f ? f.existLoc : '';
+  $('wsExistLoc').textContent = existLoc || '(nije izabran)';
+  $('wsExistLoc').classList.toggle('set', !!existLoc);
+  $('wsGit').value = f ? f.git : '';
+}
+
+function switchTab(id) {
+  if (id === activeSession || !S[id]) return;
+  saveForm(activeSession);
+  activeSession = id;
+  bindActive();
+  restoreForm(id);
+  $('banner').style.display = 'none';
+  $('log').innerHTML = '';
+  (S[id].logEvents || []).forEach(addLogDom);
+  renderTabs();
+  renderAll();
+}
+
+async function newTab() {
+  saveForm(activeSession);
+  const r = await fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  if (!sessionsList.some((s) => s.id === j.id)) sessionsList.push({ id: j.id, name: j.name });
+  ensureS(j.id);
+  switchTab(j.id);
+}
+
+async function closeTab(id) {
+  const r = await fetch('/api/sessions/' + encodeURIComponent(id), { method: 'DELETE' });
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  // session_closed SSE event completes the cleanup
+}
+
+// ---------- SSE ----------
+const es = new EventSource('/api/events');
+es.onmessage = (m) => {
+  const evt = JSON.parse(m.data);
+
+  if (evt.type === 'hello') {
+    sessionsList = evt.sessions.map((s) => ({ id: s.id, name: s.name }));
+    for (const s of evt.sessions) {
+      const box = ensureS(s.id);
+      box.state = s.state;
+      box.logEvents = [...(s.state.log || [])];
+      box.planDraft = s.state.plan ? structuredClone(s.state.plan) : null;
+    }
+    if (!sessionsList.some((s) => s.id === activeSession)) activeSession = sessionsList[0].id;
+    bindActive();
+    $('log').innerHTML = '';
+    (S[activeSession].logEvents || []).forEach(addLogDom);
+    renderTabs();
+    renderAll();
+    return;
+  }
+  if (evt.type === 'session_created') {
+    if (!sessionsList.some((s) => s.id === evt.session.id)) sessionsList.push({ id: evt.session.id, name: evt.session.name });
+    ensureS(evt.session.id).state = evt.session.state;
+    renderTabs();
+    return;
+  }
+  if (evt.type === 'session_closed') {
+    delete S[evt.sessionId];
+    sessionsList = sessionsList.filter((s) => s.id !== evt.sessionId);
+    if (activeSession === evt.sessionId && sessionsList.length) {
+      activeSession = sessionsList[0].id;
+      bindActive();
+      restoreForm(activeSession);
+      $('log').innerHTML = '';
+      (S[activeSession].logEvents || []).forEach(addLogDom);
+      renderAll();
+    }
+    renderTabs();
+    return;
+  }
+
+  const sid = evt.sessionId;
+  if (!sid || !S[sid]) return;
+  const box = S[sid];
+  const active = sid === activeSession;
+  if (evt.state) { box.state = evt.state; if (active) state = box.state; }
+
+  if (evt.type === 'phase_change' || evt.type === 'run_started') { if (active) renderAll(); renderTabs(); if (evt.type === 'run_started') loadResumable(); }
+  if (evt.type === 'plan_ready') {
+    box.planDraft = structuredClone(box.state.plan);
+    if (active) { planDraft = box.planDraft; renderAll(); }
+    renderTabs(); beep();
+    if (Notification?.permission === 'granted') new Notification('Agent Harness', { body: `📋 ${sessionName(sid)}: plan spreman (${(box.state.plan || []).length} taskova) — čeka odobrenje.` });
+  }
+  if (evt.type === 'plan_failed') { if (active) { renderAll(); showBanner('Planiranje nije uspelo: ' + evt.error, true); } renderTabs(); }
+  if (evt.type === 'agent_update') {
+    const i = box.state.agents.findIndex((a) => a.id === evt.agent.id);
+    if (i >= 0) box.state.agents[i] = { ...box.state.agents[i], ...evt.agent }; else box.state.agents.push(evt.agent);
+    if (active) { renderAgents(); refreshAgentDialog(evt.agent.id); }
+  }
+  if (evt.type === 'agent_text') {
+    const a = box.state.agents.find((x) => x.id === evt.agentId);
+    if (a) { a.lastText = evt.text; if (active) refreshAgentDialog(evt.agentId); }
+  }
+  if (evt.type === 'usage') { box.state.usage = evt.totals; if (active) renderCost(evt.totals); }
+  if (evt.type === 'task_update') {
+    const i = box.state.tasks.findIndex((t) => t.id === evt.task.id);
+    if (i >= 0) box.state.tasks[i] = evt.task; else box.state.tasks.push(evt.task);
+    if (active) renderBoard();
+  }
+  if (evt.type === 'log') {
+    box.logEvents.push(evt);
+    if (box.logEvents.length > 400) box.logEvents.splice(0, 100);
+    if (active) addLogDom(evt);
+  }
+  if (evt.type === 'run_finished') {
+    loadRuns();
+    renderTabs();
+    const ok = evt.stuck === 0;
+    if (active) {
+      renderAll();
+      if (evt.usage) renderCost(evt.usage);
+      $('openWs').style.display = '';
+      showBanner(
+        (ok ? '🎉 Svi taskovi završeni! ' : `⚠ Završeno ${evt.done}/${evt.total}, zaglavljeno: ${evt.stuck} — klikni ↻ na kartici za novi pokušaj. `) +
+        'Detalji u logu' + ($('notifyEmail').value ? ' + email notifikacija.' : '.'), !ok);
+    }
+    beep();
+    if (Notification?.permission === 'granted') new Notification('Agent Harness', { body: `${sessionName(sid)}: tim je završio ${evt.done}/${evt.total} taskova.` });
+  }
+};
+
+function sessionName(id) { return (sessionsList.find((s) => s.id === id) || {}).name || id; }
+
+function renderCost(u) {
+  if (!u || !u.calls) { $('cost').textContent = ''; return; }
+  $('cost').textContent = `💰 ~$${u.costUsd.toFixed(2)}`;
+  $('cost').title = `${u.calls} API poziva · in ${u.input} + cache ${u.cacheRead}r/${u.cacheWrite}w · out ${u.output}`;
+}
+
+// ---------- render ----------
+const PHASE_TEXT = {
+  idle: 'neaktivan', planning: 'team lead pravi plan…', awaiting_approval: 'plan čeka tvoje odobrenje',
+  running: 'tim radi…', finished: 'završeno',
+};
+function renderAll() {
+  const p = state.phase || 'idle';
+  const paused = state.pausedUntil && state.pausedUntil > Date.now();
+  $('statustext').textContent = paused ? '⏸ pauza — limit plana' : (PHASE_TEXT[p] || p);
+  renderPauseBar(paused);
+  $('statusline').className = 'statusline' + (p === 'running' ? ' on' : p === 'planning' || p === 'awaiting_approval' ? ' plan' : '');
+  $('planBtn').disabled = p === 'planning' || p === 'awaiting_approval' || p === 'running';
+  $('soloBtn').disabled = $('planBtn').disabled;
+  $('stopBtn').style.display = p === 'planning' || p === 'awaiting_approval' || p === 'running' ? '' : 'none';
+  $('planningPanel').style.display = p === 'planning' ? '' : 'none';
+  $('openWs').style.display = p === 'finished' ? '' : 'none';
+  $('steerPanel').style.display = p === 'running' ? '' : 'none';
+  if (p === 'running') {
+    $('steerTarget').innerHTML = '<option value="">Ceo tim</option>' +
+      state.tasks.filter((t) => !['done'].includes(t.status)).map((t) => `<option value="${t.id}">task #${t.id}: ${esc(t.title.slice(0, 30))}</option>`).join('');
+  }
+  renderCost(state.usage);
+  renderPlan(); renderAgents(); renderBoard(); renderDepGraph();
+}
+
+function renderPlan() {
+  const show = state.phase === 'awaiting_approval' && planDraft;
+  $('planPanel').style.display = show ? '' : 'none';
+  if (!show) return;
+  $('planGoal').textContent = 'Cilj: ' + (state.goal || '');
+  $('planList').innerHTML = planDraft.map((t, i) => `
+    <div class="plantask">
+      <div class="row">
+        <div class="num">#${i + 1}</div>
+        <input type="text" data-i="${i}" data-f="title" value="${escAttr(t.title)}">
+        <button class="ghost danger" data-del="${i}" title="Ukloni task">✕</button>
+      </div>
+      <textarea data-i="${i}" data-f="description" rows="2">${esc(t.description || '')}</textarea>
+      <div class="row" style="margin-top:6px;align-items:center">
+        <label style="margin:0;flex:0 0 auto">🔗 zavisi od taskova:</label>
+        <input type="text" data-i="${i}" data-f="dependsOn" placeholder="npr. 1,3" value="${escAttr((t.dependsOn || []).join(','))}" style="flex:0 0 110px">
+        <label style="margin:0 0 0 8px;flex:0 0 auto">veličina:</label>
+        <select data-i="${i}" data-f="size" style="flex:0 0 64px">
+          ${['S','M','L'].map((z) => `<option ${((t.size || 'M') === z) ? 'selected' : ''}>${z}</option>`).join('')}
+        </select>
+      </div>
+    </div>`).join('');
+  const MIN = { S: 3, M: 8, L: 15 };
+  const total = planDraft.reduce((a, t) => a + (MIN[t.size || 'M'] || 8), 0);
+  $('planEstimate').textContent = `Gruba procena: ~${total} min sekvencijalno (paralelno manje, zavisi od grafa zavisnosti i motora).`;
+}
+$('planList').addEventListener('input', handlePlanEdit);
+$('planList').addEventListener('change', handlePlanEdit);
+function handlePlanEdit(e) {
+  const el = e.target;
+  if (el.dataset.i == null || !el.dataset.f) return;
+  const t = planDraft[Number(el.dataset.i)];
+  if (el.dataset.f === 'dependsOn') t.dependsOn = el.value.split(/[,\s]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  else t[el.dataset.f] = el.value;
+}
+$('planList').addEventListener('click', (e) => {
+  const del = e.target.closest('[data-del]')?.dataset.del;
+  if (del != null) { planDraft.splice(Number(del), 1); renderPlan(); }
+});
+$('planAdd').addEventListener('click', () => { planDraft.push({ title: 'Novi task', description: '' }); renderPlan(); });
+
+// ---------- rate-limit pause bar ----------
+function renderPauseBar(paused) {
+  $('pauseBar').style.display = paused ? 'block' : 'none';
+  if (!paused) return;
+  const left = Math.max(0, state.pausedUntil - Date.now());
+  const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
+  $('pauseText').textContent = `⏸ Limit Claude plana dostignut — run pauziran, automatski nastavak za ${mm}:${String(ss).padStart(2, '0')}.`;
+}
+setInterval(() => {
+  const paused = state.pausedUntil && state.pausedUntil > Date.now();
+  if (paused || $('pauseBar').style.display === 'block') renderPauseBar(paused);
+}, 1000);
+$('resumePauseBtn').addEventListener('click', async () => {
+  const r = await fetch('/api/resume-pause', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: activeSession }) });
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  if (j.state) { S[activeSession].state = j.state; state = j.state; renderAll(); }
+});
+
+// ---------- interrupted runs (resume after server restart) ----------
+async function loadResumable() {
+  try {
+    const j = await (await fetch('/api/resumable')).json();
+    const runs = j.runs || [];
+    $('resumeBar').style.display = runs.length ? 'block' : 'none';
+    $('resumeList').innerHTML = runs.map((r) => `
+      <div class="row" style="align-items:center;margin-top:6px">
+        <div style="flex:1;font-weight:400">
+          <b>${esc((r.goal || '').slice(0, 90))}</b><br>
+          <span class="hint">${r.done}/${r.total} završeno · ${esc(r.workspacePath || '')}</span>
+        </div>
+        <button class="ghost" data-resume="${escAttr(r.id)}" style="flex:0 0 auto">⏯ Nastavi run</button>
+        <button class="ghost danger" data-discard="${escAttr(r.id)}" style="flex:0 0 auto" title="Obriši snimak">✕</button>
+      </div>`).join('');
+  } catch { /* server unreachable — ignore */ }
+}
+$('resumeList').addEventListener('click', async (e) => {
+  const resumeId = e.target.closest('[data-resume]')?.dataset.resume;
+  const discardId = e.target.closest('[data-discard]')?.dataset.discard;
+  if (resumeId) {
+    const r = await fetch('/api/resume-run', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: resumeId, sessionId: activeSession }) });
+    const j = await r.json();
+    if (j.error) return showBanner(j.error, true);
+    if (j.state) { S[activeSession].state = j.state; state = j.state; renderAll(); }
+    loadResumable();
+  } else if (discardId) {
+    await fetch('/api/resumable/' + encodeURIComponent(discardId), { method: 'DELETE' });
+    loadResumable();
+  }
+});
+
+function showBanner(msg, isErr) {
+  const b = $('banner');
+  b.textContent = msg;
+  b.className = 'banner' + (isErr ? ' err' : '');
+  b.style.display = 'block';
+}
+
+function renderAgents() {
+  if (!state.agents.length) {
+    $('agents').innerHTML = '<span style="color:var(--muted);font-size:.82rem">Zadaj cilj — team lead prvo pravi plan, pa tim kreće…</span>';
+    return;
+  }
+  const R = { programmer: 'Programer', reviewer: 'Team Lead', qa: 'QA' };
+  const dropAttrs = (a) => a.role !== 'programmer' ? '' :
+    `ondragover="event.preventDefault();this.classList.add('dropok')" ondragleave="this.classList.remove('dropok')" ondrop="this.classList.remove('dropok');dropOnAgent(event,${a.id})"`;
+  $('agents').innerHTML = state.agents.map((a) => `
+    <div class="agent ${a.status === 'working' ? 'working' : ''}" ${dropAttrs(a)} onclick="openAgent(${a.id})" style="cursor:pointer" title="Klik za detalje · prevuci task na programera za ručnu dodelu">
+      <div class="name"><span class="dot"></span>${a.name}<span class="rolebadge r-${a.role}">${R[a.role]}</span></div>
+      <div class="st">${a.status === 'working' ? 'radi na tasku #' + a.currentTaskId : a.status === 'done' ? 'završio' : 'čeka posao'}${a.usage && a.usage.costUsd ? ` · ~$${a.usage.costUsd.toFixed(2)}` : ''}</div>
+    </div>`).join('');
+}
+
+let agentDialogId = null;
+function openAgent(id) {
+  agentDialogId = id;
+  refreshAgentDialog(id, true);
+  taskDialog.showModal();
+}
+function refreshAgentDialog(id, force) {
+  if (agentDialogId !== id || (!force && !taskDialog.open)) return;
+  const a = state.agents.find((x) => x.id === id);
+  if (!a) return;
+  const R = { programmer: 'Programer', reviewer: 'Team Lead', qa: 'QA' };
+  const u = a.usage || {};
+  $('taskDialogBody').innerHTML = `<h2>${esc(a.name)} <span class="rolebadge r-${a.role}">${R[a.role]}</span></h2>
+    <div class="hint">Status: ${a.status}${a.currentTaskId ? ' · task #' + a.currentTaskId : ''}
+    ${u.calls ? `<br>Potrošnja: ~$${(u.costUsd || 0).toFixed(3)} · ${u.calls} poziva · in ${u.input} (+${u.cacheRead} keš) · out ${u.output}` : ''}</div>
+    <p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">Poslednji izlaz (uživo):</p>
+    <pre>${esc(a.lastText || '(još ništa)')}</pre>`;
+}
+
+function renderBoard() {
+  const depsOf = (t) => (t.dependsOn && t.dependsOn.length ? `<span>🔗 #${t.dependsOn.join(',#')}</span>` : '');
+  const costOf = (t) => (t.usage && t.usage.costUsd ? `<span>~$${t.usage.costUsd.toFixed(2)}</span>` : '');
+  const draggable = (t) => ['queued', 'needs_fix', 'stuck'].includes(t.status);
+  $('board').innerHTML = COLS.map(([key, title]) => {
+    const items = state.tasks.filter((t) => COL_OF[t.status] === key);
+    return `<div class="col"><h3>${title}<span>${items.length}</span></h3>` + items.map((t) => `
+      <div class="card s-${t.status}" onclick="openTask(${t.id})" ${draggable(t) ? `draggable="true" ondragstart="dragTask(event,${t.id})"` : ''}>
+        <div>${t.pinnedTo ? '📌 ' : ''}#${t.id} ${esc(t.title)}${t.status === 'needs_fix' ? ' 🔴 popravka' : ''}${t.status === 'stuck' ? ' ⚠ STUCK' : ''}${t.status === 'awaiting_merge' ? ' ✋ čeka merge' : ''}</div>
+        <div class="meta"><span>👤 ${t.assignee || '—'}</span><span>🔁 rev ${t.reviewCycles}</span><span>🧪 qa ${t.qaCycles}</span>${depsOf(t)}${costOf(t)}</div>
+        ${t.status === 'stuck' ? `<button class="ghost" style="margin-top:7px;width:100%" onclick="event.stopPropagation();retryTask(${t.id})">↻ Pokušaj ponovo</button>` : ''}
+        ${t.status === 'awaiting_merge' ? `<button class="primary" style="margin-top:7px;padding:7px" onclick="event.stopPropagation();approveMerge(${t.id})">✓ Merge u main</button>` : ''}
+      </div>`).join('') + '</div>';
+  }).join('');
+}
+
+// ---------- drag&drop: task -> programmer ----------
+let dragTaskId = null;
+function dragTask(e, id) { dragTaskId = id; e.dataTransfer.effectAllowed = 'move'; }
+async function dropOnAgent(e, agentId) {
+  e.preventDefault();
+  if (dragTaskId == null) return;
+  const taskId = dragTaskId;
+  dragTaskId = null;
+  const sid = activeSession;
+  const r = await fetch('/api/assign-task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId, agentId }) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+}
+
+async function approveMerge(id) {
+  const sid = activeSession;
+  const r = await fetch('/api/approve-merge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId: id }) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+}
+
+async function showDiff(id) {
+  const r = await fetch(`/api/task-diff?session=${activeSession}&taskId=${id}`);
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  const colored = (j.diff || '').split('\n').map((l) => {
+    const e = esc(l);
+    if (l.startsWith('+') && !l.startsWith('+++')) return `<span class="da">${e}</span>`;
+    if (l.startsWith('-') && !l.startsWith('---')) return `<span class="dd">${e}</span>`;
+    if (l.startsWith('@@') || l.startsWith('diff ')) return `<span class="dh">${e}</span>`;
+    return e;
+  }).join('\n');
+  agentDialogId = null;
+  $('taskDialogBody').innerHTML = `<h2>Diff — task #${id}</h2><div class="diffview">${colored || '(prazan diff)'}</div>`;
+  taskDialog.showModal();
+}
+
+// ---------- dependency graph (layered SVG) ----------
+const STATUS_COLOR = { queued: '#8b91a5', coding: '#6c8cff', in_review: '#f5b14c', in_qa: '#4cc9f0', awaiting_merge: '#4cc9f0', needs_fix: '#ff6b6b', done: '#3ecf8e', stuck: '#ff6b6b' };
+function depGraphSvg(tasks) {
+  if (!tasks || tasks.length < 2 || !tasks.some((t) => (t.dependsOn || []).length)) return null;
+  const depth = {};
+  const d = (t) => {
+    if (depth[t.id] != null) return depth[t.id];
+    depth[t.id] = 0; // cycle guard
+    const deps = (t.dependsOn || []).map((x) => tasks.find((y) => y.id === x)).filter(Boolean);
+    depth[t.id] = deps.length ? 1 + Math.max(...deps.map(d)) : 0;
+    return depth[t.id];
+  };
+  tasks.forEach(d);
+  const layers = [];
+  for (const t of tasks) (layers[depth[t.id]] = layers[depth[t.id]] || []).push(t);
+  const W = 900, colW = W / layers.length, rowH = 34;
+  const H = Math.max(...layers.map((l) => l.length)) * rowH + 20;
+  const pos = {};
+  layers.forEach((layer, li) => layer.forEach((t, ri) => {
+    pos[t.id] = { x: li * colW + 20, y: ri * rowH + 24 + (H - layer.length * rowH) / 2 };
+  }));
+  let edges = '', nodes = '';
+  for (const t of tasks) {
+    for (const dep of (t.dependsOn || [])) {
+      const a = pos[dep], b = pos[t.id];
+      if (!a || !b) continue;
+      edges += `<path d="M${a.x + 120},${a.y - 7} C${(a.x + b.x + 120) / 2},${a.y - 7} ${(a.x + b.x + 120) / 2},${b.y - 7} ${b.x},${b.y - 7}" fill="none" stroke="#2a2f3f" stroke-width="1.5"/>`;
+    }
+  }
+  for (const t of tasks) {
+    const p = pos[t.id], c = STATUS_COLOR[t.status] || '#8b91a5';
+    nodes += `<g><rect x="${p.x}" y="${p.y - 18}" width="120" height="22" rx="6" fill="#1e2230" stroke="${c}"/>
+      <circle cx="${p.x + 11}" cy="${p.y - 7}" r="4" fill="${c}"/>
+      <text x="${p.x + 21}" y="${p.y - 3}" font-size="10" fill="#e8eaf0" font-family="ui-monospace">#${t.id} ${esc(String(t.title).slice(0, 13))}</text></g>`;
+  }
+  return { svg: edges + nodes, W, H };
+}
+function renderDepGraph() {
+  const g = depGraphSvg(state.tasks);
+  $('depGraphWrap').style.display = g ? '' : 'none';
+  if (g) {
+    const el = $('depGraph');
+    el.setAttribute('viewBox', `0 0 ${g.W} ${g.H}`);
+    el.innerHTML = g.svg;
+  }
+}
+
+$('steerSend').addEventListener('click', async () => {
+  const msg = $('steerMsg').value.trim();
+  if (!msg) return;
+  const sid = activeSession;
+  const r = await fetch('/api/steer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId: $('steerTarget').value || null, message: msg }) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  $('steerMsg').value = '';
+});
+$('steerMsg').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('steerSend').click(); });
+
+async function retryTask(id) {
+  const sid = activeSession;
+  const r = await fetch('/api/retry-task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId: id }) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  $('banner').style.display = 'none';
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+}
+
+function openTask(id) {
+  const t = state.tasks.find((x) => x.id === id);
+  if (!t) return;
+  agentDialogId = null;
+  const u = t.usage || {};
+  $('taskDialogBody').innerHTML = `<h2>#${t.id} ${esc(t.title)} <button class="ghost" style="float:right" onclick="showDiff(${t.id})">⤢ Prikaži diff</button></h2>
+    <div class="hint">Status: ${t.status} · Programer: ${t.assignee || '—'} · Review ciklusa: ${t.reviewCycles} · QA: ${t.qaCycles}
+    ${t.dependsOn && t.dependsOn.length ? ' · 🔗 zavisi od #' + t.dependsOn.join(', #') : ''}
+    ${u.calls ? ` · ~$${(u.costUsd || 0).toFixed(3)} (${u.calls} poziva)` : ''}<br>Fajlovi: ${(t.changedFiles || []).map(esc).join(', ') || '—'}</div>
+    ${(t.history || []).map((h) => `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">${h.role} — ${h.agent}</p><pre>${esc(h.text)}</pre>`).join('')}`;
+  taskDialog.showModal();
+}
+
+// ---------- run history ----------
+async function loadRuns() {
+  let j = { runs: [] };
+  try { j = await (await fetch('/api/runs')).json(); } catch {}
+  if (!j.runs.length) { $('runsList').innerHTML = '(nema sačuvanih runova)'; return; }
+  $('runsList').innerHTML = j.runs.map((r) => `
+    <div class="diritem" data-run="${escAttr(r.id)}" style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
+      ${r.stuck ? '⚠' : '✅'} ${r.done}/${r.total}${r.costUsd ? ` · ~$${r.costUsd.toFixed(2)}` : ''} · ${r.finishedAt ? new Date(r.finishedAt).toLocaleString('sr-RS') : ''}<br>
+      <span style="color:var(--muted)">${esc((r.goal || '').slice(0, 70))}</span>
+    </div>`).join('');
+}
+$('runsList').addEventListener('click', async (e) => {
+  const id = e.target.closest('[data-run]')?.dataset.run;
+  if (!id) return;
+  const r = await fetch('/api/runs/' + encodeURIComponent(id));
+  if (!r.ok) return;
+  const j = await r.json();
+  agentDialogId = null;
+  $('taskDialogBody').innerHTML = `<h2>📜 Run ${esc(new Date(j.finishedAt).toLocaleString('sr-RS'))}</h2>
+    <div class="hint">Cilj: ${esc(j.goal)}<br>Workspace: ${esc(j.workspacePath || '')}</div>
+    <pre>${esc(j.summary || '')}</pre>
+    ${(j.tasks || []).map((t) => `<p style="font-size:.72rem;color:var(--muted);margin:8px 0 2px">#${t.id} [${t.status}] ${esc(t.title)}</p>`).join('')}`;
+  taskDialog.showModal();
+});
+
+$('openWs').addEventListener('click', async () => {
+  const r = await fetch('/api/open-workspace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: activeSession }) });
+  const j = await r.json();
+  if (j.error) showBanner(j.error, true);
+});
+
+function addLogDom(evt) {
+  const d = new Date(evt.ts);
+  const el = document.createElement('div');
+  el.innerHTML = `<span class="t">${d.toLocaleTimeString('sr-RS')}</span><span class="a">${esc(evt.agent || '')}</span>${esc(evt.msg || '')}`;
+  $('log').appendChild(el);
+  $('log').scrollTop = $('log').scrollHeight;
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function escAttr(s) { return esc(s); }
+
+function beep() {
+  try {
+    const ctx = new AudioContext();
+    [880, 1100, 1320].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(.18, ctx.currentTime + i * .18);
+      g.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + i * .18 + .16);
+      o.start(ctx.currentTime + i * .18); o.stop(ctx.currentTime + i * .18 + .17);
+    });
+  } catch {}
+}
+
+// ---------- actions ----------
+function workspaceBody() {
+  const wsmode = document.querySelector('input[name=wsmode]:checked').value;
+  if (wsmode === 'new') {
+    const name = ($('wsNewName').value || '').trim().replace(/[^\w.\-À-ſ ]+/g, '-');
+    if (!newLoc) throw new Error('Izaberi lokaciju novog projekta (📁 Izaberi).');
+    if (!name) throw new Error('Unesi ime novog projekta.');
+    return { workspacePath: newLoc + (newLoc.endsWith(sep) ? '' : sep) + name, gitUrl: '' };
+  }
+  if (wsmode === 'existing') {
+    if (!existLoc) throw new Error('Izaberi folder postojećeg projekta (📁 Izaberi).');
+    return { workspacePath: existLoc, gitUrl: '' };
+  }
+  const git = ($('wsGit').value || '').trim();
+  if (!git) throw new Error('Unesi git clone URL.');
+  return { workspacePath: '', gitUrl: git };
+}
+
+$('planBtn').addEventListener('click', async () => {
+  let ws;
+  try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  const body = {
+    sessionId: activeSession,
+    programmers: $('programmers').value, reviewers: $('reviewers').value, qa: $('qa').value,
+    goal: $('goal').value.trim(),
+    engine: currentEngine(),
+    finalQa: $('optFinalQa').checked,
+    requireMergeApproval: $('optMergeApproval').checked,
+    prMode: $('optPrMode').checked,
+    models: {
+      programmer: $('modelProgrammer').value,
+      reviewer: $('modelReviewer').value,
+      qa: $('modelQa').value,
+    },
+    ...ws,
+    notifyEmail: $('notifyEmail').value,
+  };
+  if (!body.goal) return showBanner('Opiši zadatak (cilj) za tim.', true);
+  $('banner').style.display = 'none';
+  $('log').innerHTML = '';
+  Notification?.requestPermission?.();
+  const sid = activeSession;
+  const r = await fetch('/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+  renderTabs();
+});
+
+$('soloBtn').addEventListener('click', async () => {
+  let ws;
+  try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  const role = $('soloRole').value;
+  const modelSel = { programmer: 'modelProgrammer', reviewer: 'modelReviewer', qa: 'modelQa' }[role];
+  const body = {
+    sessionId: activeSession,
+    role,
+    instruction: $('goal').value.trim(),
+    engine: currentEngine(),
+    model: $(modelSel).value,
+    ...ws,
+    notifyEmail: $('notifyEmail').value,
+  };
+  if (!body.instruction) return showBanner('Opiši u polju za cilj šta solo agent treba da uradi.', true);
+  $('banner').style.display = 'none';
+  $('log').innerHTML = '';
+  Notification?.requestPermission?.();
+  const sid = activeSession;
+  const r = await fetch('/api/quick', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+  renderTabs();
+});
+
+$('approveBtn').addEventListener('click', async () => {
+  const tasks = (planDraft || []).filter((t) => t.title && t.title.trim());
+  if (!tasks.length) return showBanner('Plan nema nijedan task.', true);
+  const sid = activeSession;
+  const r = await fetch('/api/approve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, tasks }) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+  renderTabs();
+});
+
+$('replanBtn').addEventListener('click', async () => {
+  const feedback = $('planFeedback').value.trim();
+  if (!feedback) return showBanner('Upiši primedbe pa klikni „Ponovi planiranje".', true);
+  const sid = activeSession;
+  const r = await fetch('/api/replan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, feedback }) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  $('planFeedback').value = '';
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+  renderTabs();
+});
+
+$('stopBtn').addEventListener('click', () => fetch('/api/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: activeSession }) }));
+
+$('testEmail').addEventListener('click', async () => {
+  if (!$('notifyEmail').value) return showBanner('Unesi email primaoca.', true);
+  const r = await fetch('/api/test-email', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ to: $('notifyEmail').value }),
+  });
+  const j = await r.json();
+  showBanner(j.ok ? '📧 Test email poslat — proveri inbox.' : 'Email greška: ' + j.error, !j.ok);
+});
+
+// ---------- init ----------
+loadModels();
+loadRuns();
+loadResumable();
+fetch('/api/fs').then((r) => r.json()).then((j) => {
+  sep = j.sep; homeDir = j.home;
+  if (!newLoc) { newLoc = j.home; $('wsNewLoc').textContent = j.home; $('wsNewLoc').classList.add('set'); }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "agent-harness",
+  "version": "1.0.0",
+  "description": "Multi-agent dev team harness: programmer agents, team-lead review loop, QA agents, email notification. Zero dependencies.",
+  "type": "module",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
