@@ -445,8 +445,13 @@ function clampInt(v, min, max, dflt) {
   return Math.min(max, Math.max(min, n));
 }
 
-server.listen(PORT, () => {
-  console.log(`\n  Agent Harness ▸ http://localhost:${PORT}\n`);
+// SECURITY: agents run with --dangerously-skip-permissions, so anyone who can
+// reach this port can execute arbitrary commands on this machine. Bind to
+// localhost by default; set HOST=0.0.0.0 explicitly for LAN/VPN (Tailscale) use.
+const HOST = process.env.HOST || '127.0.0.1';
+server.listen(PORT, HOST, () => {
+  console.log(`\n  Agent Harness ▸ http://localhost:${PORT}  (bind: ${HOST})\n`);
+  if (HOST !== '127.0.0.1') console.log('  ⚠ Server je dostupan van ove mašine — svako sa mreže može da izvršava komande!');
   console.log(apiKey() ? '  ANTHROPIC_API_KEY: postavljen ✓' : '  ANTHROPIC_API_KEY: nije postavljen → MOCK mod (dodaj ga u .env)');
-  console.log('  Email: Resend' + (process.env.RESEND_API_KEY ? ' (env ključ) ✓' : ' (ugrađeni ključ)'));
+  console.log('  Email: Resend' + (process.env.RESEND_API_KEY ? ' (env ključ) ✓' : ' (nedostaje RESEND_API_KEY u .env)'));
 });

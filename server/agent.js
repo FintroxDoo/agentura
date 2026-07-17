@@ -69,8 +69,9 @@ export async function runAgentEpisode({ apiKey, model, system, userMessage, work
 
     const results = [];
     for (const tu of toolUses) {
-      onEvent({ type: 'tool_call', tool: tu.name, input: summarizeInput(tu.name, tu.input) });
+      onEvent({ type: 'tool_call', tool: tu.name, input: tu.input });
       const output = await execute(tu.name, tu.input);
+      onEvent({ type: 'tool_result', tool: tu.name, output: String(output).slice(0, 2000) });
       results.push({ type: 'tool_result', tool_use_id: tu.id, content: output });
     }
     messages.push({ role: 'user', content: results });
@@ -82,12 +83,6 @@ export async function runAgentEpisode({ apiKey, model, system, userMessage, work
     iterations: MAX_ITERATIONS,
     usage,
   };
-}
-
-function summarizeInput(tool, input) {
-  if (tool === 'write_file') return { path: input.path, bytes: (input.content || '').length };
-  if (tool === 'run_command') return { command: (input.command || '').slice(0, 200) };
-  return input;
 }
 
 async function callClaude({ apiKey, model, system, messages }) {

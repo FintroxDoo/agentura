@@ -106,9 +106,11 @@ export class Orchestrator {
       pausedUntil: this.pausedUntil,
       soloRole: this.soloRole,
       steerings: this.steerings.slice(-20),
-      agents: this.agents.map(({ id, name, role, status, currentTaskId, usage, lastText }) => ({
-        id, name, role, status, currentTaskId, usage,
-        lastText: (lastText || '').slice(0, 4000),
+      agents: this.agents.map((a) => ({
+        id: a.id, name: a.name, role: a.role, status: a.status, currentTaskId: a.currentTaskId, usage: a.usage,
+        lastText: (a.lastText || '').slice(0, 4000),
+        // last 40 entries, each trimmed — full text still streams live via agent_activity
+        activity: (a.activity || []).slice(-40).map((e) => ({ ...e, text: e.text ? String(e.text).slice(0, 800) : e.text })),
       })),
       tasks: this.tasks,
       log: this.log.slice(-200),
@@ -236,7 +238,7 @@ export class Orchestrator {
           : `PROJECT GOAL:\n${this.goal}\n\n` +
             'Your previous reply did NOT contain a parseable task plan. Do NOT explore or explain further. ' +
             'Reply with ONLY the plan as a single fenced ```json code block — a JSON array of ' +
-            '{ "title", "description", "size", "dependsOn" } objects — and NOTHING else before or after it.';
+            '{ "title", "description", "size", "dependsOn", "acceptance" } objects — and NOTHING else before or after it.';
         if (attempt > 1) this.logMsg(name, `⚠ Plan nije bio u ispravnom JSON formatu — tražim ponovo samo JSON (pokušaj ${attempt}/3)…`);
 
         const result = await runPlanEpisode(msg, sessionId);
@@ -291,6 +293,7 @@ export class Orchestrator {
       description: String(t.description || t.title).trim(),
       size: ['S', 'M', 'L'].includes(t.size) ? t.size : 'M',
       dependsOn: normalizeDeps(t.dependsOn, i + 1, n),
+      acceptance: normalizeAcceptance(t.acceptance),
       status: 'queued', // queued | coding | in_review | in_qa | awaiting_merge | needs_fix | done | stuck
       assignee: null,   // claimed at pickup
       assigneeId: null,
@@ -814,6 +817,21 @@ export class Orchestrator {
     }, 20_000);
   }
 
+  // Per-agent live activity feed (tool calls, code writes, command output,
+  // narration) — bounded ring buffer; streamed live and included in state()
+  // so the UI rehydrates on tab switch / reconnect.
+  pushActivity(agent, entry) {
+    if (!entry) return;
+    const e = { ...entry, ts: Date.now() };
+    // collapse consecutive identical text entries (engines re-emit the same text)
+    const buf = (agent.activity = agent.activity || []);
+    const last = buf[buf.length - 1];
+    if (last && last.kind === e.kind && last.text === e.text && last.file === e.file) return;
+    buf.push(e);
+    if (buf.length > 80) buf.splice(0, buf.length - 80);
+    this.emit('agent_activity', { agentId: agent.id, entry: e });
+  }
+
   setAgent(agent, status, taskId = null) {
     agent.status = status;
     agent.currentTaskId = taskId;
@@ -828,11 +846,27 @@ export class Orchestrator {
   async episode({ agent, role, task, system, userMessage, attempt, workspace, resumeSessionId = null }) {
     const ws = workspace || this.config.workspacePath;
     const onEvent = (e) => {
-      if (e.type === 'tool_call') this.logMsg(agent.name, `🔧 ${e.tool} ${JSON.stringify(e.input).slice(0, 160)}`);
-      if (e.type === 'nudge') this.logMsg(agent.name, `⚠ Predao prazan rad (bez izmena fajlova) — podsetnik da implementira (pokušaj ${e.attempt}/2)`);
+      if (e.type === 'tool_call') {
+        this.logMsg(agent.name, `🔧 ${e.tool} ${JSON.stringify(e.input).slice(0, 160)}`);
+        this.pushActivity(agent, activityFromTool(e.tool, e.input));
+      }
+      if (e.type === 'tool_result' && String(e.output || '').trim()) {
+        // Only command/test output is interesting in the live feed — results of
+        // Read/Glob/Write are file contents / "ok" acks and would flood it.
+        const T = String(e.tool || '').toLowerCase();
+        const cmdLike = !e.tool || /bash|run_command|command|exec|shell/.test(T);
+        if (cmdLike || e.isError) {
+          this.pushActivity(agent, { kind: 'result', text: String(e.output).slice(0, 1500), error: !!e.isError });
+        }
+      }
+      if (e.type === 'nudge') {
+        this.logMsg(agent.name, `⚠ Predao prazan rad (bez izmena fajlova) — podsetnik da implementira (pokušaj ${e.attempt}/2)`);
+        this.pushActivity(agent, { kind: 'note', text: `⚠ Prazan rad — podsetnik da implementira (pokušaj ${e.attempt}/2)` });
+      }
       if (e.type === 'agent_text') {
         agent.lastText = e.text;
         this.emit('agent_text', { agentId: agent.id, text: e.text.slice(0, 4000) });
+        this.pushActivity(agent, { kind: 'text', text: e.text.slice(0, 1500) });
       }
     };
     let result;
@@ -911,6 +945,7 @@ export class Orchestrator {
         } else {
           userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}\n\nImplement this task in the workspace now.`;
         }
+        userMessage += acceptanceBlock(task, 'programmer');
         userMessage += await this.notesBlock();
         userMessage += this.steeringBlockFor(task.id);
 
@@ -963,7 +998,7 @@ export class Orchestrator {
       const prevBlock = prevReview
         ? `\n\nYOUR PREVIOUS REVIEW FEEDBACK (cycle ${task.reviewCycles - 1}) — FIRST verify each of these points was addressed; do not raise new minor issues if these are resolved:\n${prevReview.text.slice(0, 4000)}\n`
         : '';
-      const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}\n\nProgrammer (${task.assignee}) summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(none reported)'}${prevBlock}\n\nDiff:\n\`\`\`\n${diff}\n\`\`\`\n\nReview this change now. Remember to end with the VERDICT line.`;
+      const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}${acceptanceBlock(task, 'reviewer')}\n\nProgrammer (${task.assignee}) summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(none reported)'}${prevBlock}\n\nDiff:\n\`\`\`\n${diff}\n\`\`\`\n\nReview this change now. Remember to end with the VERDICT line.`;
 
       try {
         const result = await this.episode({
@@ -1038,7 +1073,7 @@ export class Orchestrator {
       const prevQaBlock = prevQa
         ? `\n\nYOUR PREVIOUS QA REPORT (cycle ${task.qaCycles - 1}) — FIRST re-verify the failures you reported there:\n${prevQa.text.slice(0, 4000)}\n`
         : '';
-      const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}\n\nImplemented and code-review-approved. Programmer summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(unknown)'}${prevQaBlock}\n\nVerify this change works. Remember to end with the VERDICT line.`;
+      const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}${acceptanceBlock(task, 'qa')}\n\nImplemented and code-review-approved. Programmer summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(unknown)'}${prevQaBlock}\n\nVerify this change works. Remember to end with the VERDICT line.`;
 
       try {
         const result = await this.episode({
@@ -1152,8 +1187,16 @@ export class Orchestrator {
       const taskList = this.tasks
         .map((t) => `#${t.id} [${t.status}] ${t.title}`)
         .join('\n');
+      // Aggregate the acceptance criteria of all delivered tasks into one
+      // final checklist — integration QA re-verifies them on the MERGED state.
+      const withAcc = this.tasks.filter((t) => t.status === 'done' && t.acceptance?.length);
+      const checklist = withAcc.length
+        ? '\n\nFULL ACCEPTANCE CHECKLIST (criteria of all merged tasks — verify EACH item on the integrated project and report ✓/✗ per item; FAILED if any item fails):\n' +
+          withAcc.map((t) => `Task #${t.id} — ${t.title}:\n${t.acceptance.map((c, i) => `  ${t.id}.${i + 1} ${c}`).join('\n')}`).join('\n') + '\n'
+        : '';
       const userMessage =
         `PROJECT GOAL:\n${this.goal}\n\nCompleted tasks (already merged into ${this.mainBranch}):\n${taskList}` +
+        checklist +
         '\n\nVerify the whole project now. Remember to end with the VERDICT line.' +
         (await this.notesBlock());
       const result = await this.episode({
@@ -1305,6 +1348,25 @@ function lastVerdict(text) {
   return matches.length ? matches[matches.length - 1][1].toUpperCase() : null;
 }
 
+// Map a raw tool call to a compact live-activity entry. Handles both engines'
+// tool names (Claude Code: Write/Edit/Bash/Read/Glob/Grep; API: write_file/
+// run_command/read_file/list_dir).
+function activityFromTool(tool, input) {
+  const T = String(tool || '').toLowerCase();
+  const inp = input && typeof input === 'object' ? input : {};
+  const file = inp.path || inp.file_path || inp.file || inp.pattern || '';
+  if (/write|edit|create|multiedit/.test(T)) {
+    return { kind: 'write', tool, file, text: String(inp.content ?? inp.new_string ?? inp.contents ?? '').slice(0, 1500) };
+  }
+  if (/bash|run_command|command|exec|shell/.test(T)) {
+    return { kind: 'cmd', tool, text: String(inp.command ?? inp.cmd ?? '').slice(0, 400) };
+  }
+  if (/read|glob|grep|^ls$|list_dir|search/.test(T)) {
+    return { kind: 'read', tool, file, text: '' };
+  }
+  return { kind: 'tool', tool, text: JSON.stringify(inp).slice(0, 300) };
+}
+
 function normalizeDeps(deps, selfId, taskCount) {
   if (!Array.isArray(deps)) return [];
   return [...new Set(deps.map(Number))]
@@ -1368,8 +1430,27 @@ function tasksFromJson(jsonStr) {
       description: String(t.description || t.title).trim(),
       size: ['S', 'M', 'L'].includes(t.size) ? t.size : 'M',
       dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.map(Number).filter((d) => Number.isInteger(d) && d > 0) : [],
+      acceptance: normalizeAcceptance(t.acceptance),
     }));
   return tasks.length ? tasks : null;
+}
+
+// Acceptance criteria: array of short non-empty strings (max 8 × 300 chars).
+function normalizeAcceptance(a) {
+  if (!Array.isArray(a)) return [];
+  return a.map((c) => String(c || '').trim()).filter(Boolean).slice(0, 8).map((c) => c.slice(0, 300));
+}
+
+// Shared "checklist" block injected into programmer / reviewer / QA messages.
+function acceptanceBlock(task, role) {
+  const list = task.acceptance || [];
+  if (!list.length) return '';
+  const head = {
+    programmer: 'ACCEPTANCE CRITERIA (definition of done — your implementation must satisfy EACH):',
+    reviewer: 'ACCEPTANCE CRITERIA (request changes if the code clearly fails to cover any):',
+    qa: 'ACCEPTANCE CRITERIA (your test plan — verify EACH item and report ✓/✗ per item):',
+  }[role] || 'ACCEPTANCE CRITERIA:';
+  return `\n\n${head}\n${list.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n`;
 }
 
 function fmtTok(n) {

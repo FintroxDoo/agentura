@@ -88,6 +88,28 @@
   .log{background:#0c0e14;border:1px solid var(--border);border-radius:10px;height:260px;overflow-y:auto;padding:10px 12px;font-family:ui-monospace,Consolas,monospace;font-size:.74rem;line-height:1.55}
   .log .t{color:#525a70;margin-right:8px}
   .log .a{color:var(--accent);margin-right:6px;font-weight:600}
+  /* live agent work streams */
+  .streams{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+  .streamEmpty{color:var(--muted);font-size:.82rem}
+  .lane{border:1px solid var(--border);border-radius:10px;background:#0c0e14;display:flex;flex-direction:column;max-height:360px;overflow:hidden}
+  .lane.working{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .lane .lh{display:flex;align-items:center;gap:7px;padding:8px 11px;border-bottom:1px solid var(--border);font-size:.8rem;font-weight:600;flex:0 0 auto}
+  .lane .lh .dot{width:8px;height:8px;border-radius:50%;background:#49506a;flex:0 0 auto}
+  .lane.working .lh .dot{background:var(--accent);animation:pulse 1.3s ease-in-out infinite}
+  .lane .lh .lst{margin-left:auto;font-weight:400;font-size:.68rem;color:var(--muted)}
+  .feed{overflow-y:auto;padding:8px 11px;font-family:ui-monospace,Consolas,monospace;font-size:.72rem;line-height:1.5;flex:1}
+  .feed .ln{margin-bottom:7px;white-space:pre-wrap;word-break:break-word}
+  .feed .ln .ic{margin-right:5px}
+  .feed .write{color:#8ea2ff}
+  .feed .cmd{color:#f5b14c}
+  .feed .read{color:#7a869c}
+  .feed .tool{color:#7a869c}
+  .feed .note{color:#f5b14c}
+  .feed .result{color:#78dba9}
+  .feed .result.err{color:#ff8f8f}
+  .feed .text{color:var(--text)}
+  .feed pre.code{margin:4px 0 0;padding:7px 9px;background:#070910;border:1px solid var(--border);border-radius:6px;max-height:190px;overflow:auto;color:#cdd3e0;white-space:pre}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .banner{display:none;padding:14px 16px;border-radius:10px;background:rgba(62,207,142,.12);border:1px solid rgba(62,207,142,.4);color:var(--ok);font-weight:600}
   .banner.err{background:rgba(255,107,107,.1);border-color:rgba(255,107,107,.4);color:var(--err)}
   .statusline{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:.8rem;color:var(--muted)}
@@ -286,6 +308,11 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
     <div class="panel">
       <h2>Live log</h2>
       <div class="log" id="log"></div>
+    </div>
+
+    <div class="panel" id="streamsPanel">
+      <h2>🖥 Živi rad agenata <span class="hint" style="font-weight:400">— šta svaki agent piše/pokreće uživo</span></h2>
+      <div class="streams" id="agentStreams"><span class="streamEmpty">Kad tim krene, ovde vidiš uživo šta svaki programer kuca, koje komande QA pokreće i šta team lead pregleda.</span></div>
     </div>
   </section>
 </main>
@@ -572,12 +599,22 @@ es.onmessage = (m) => {
   if (evt.type === 'plan_failed') { if (active) { renderAll(); showBanner('Planiranje nije uspelo: ' + evt.error, true); } renderTabs(); }
   if (evt.type === 'agent_update') {
     const i = box.state.agents.findIndex((a) => a.id === evt.agent.id);
-    if (i >= 0) box.state.agents[i] = { ...box.state.agents[i], ...evt.agent }; else box.state.agents.push(evt.agent);
-    if (active) { renderAgents(); refreshAgentDialog(evt.agent.id); }
+    // preserve the live activity buffer (agent_update payload doesn't carry it)
+    const activity = i >= 0 ? box.state.agents[i].activity : undefined;
+    if (i >= 0) box.state.agents[i] = { ...box.state.agents[i], ...evt.agent, activity }; else box.state.agents.push(evt.agent);
+    if (active) { renderAgents(); refreshAgentDialog(evt.agent.id); renderStreams(); }
   }
   if (evt.type === 'agent_text') {
     const a = box.state.agents.find((x) => x.id === evt.agentId);
     if (a) { a.lastText = evt.text; if (active) refreshAgentDialog(evt.agentId); }
+  }
+  if (evt.type === 'agent_activity') {
+    const a = box.state.agents.find((x) => x.id === evt.agentId);
+    if (a) {
+      (a.activity = a.activity || []).push(evt.entry);
+      if (a.activity.length > 80) a.activity.splice(0, a.activity.length - 80);
+      if (active) appendActivity(evt.agentId, evt.entry);
+    }
   }
   if (evt.type === 'usage') { box.state.usage = evt.totals; if (active) renderCost(evt.totals); }
   if (evt.type === 'task_update') {
@@ -637,7 +674,7 @@ function renderAll() {
       state.tasks.filter((t) => !['done'].includes(t.status)).map((t) => `<option value="${t.id}">task #${t.id}: ${esc(t.title.slice(0, 30))}</option>`).join('');
   }
   renderCost(state.usage);
-  renderPlan(); renderAgents(); renderBoard(); renderDepGraph();
+  renderPlan(); renderAgents(); renderBoard(); renderDepGraph(); renderStreams();
 }
 
 function renderPlan() {
@@ -653,6 +690,8 @@ function renderPlan() {
         <button class="ghost danger" data-del="${i}" title="Ukloni task">✕</button>
       </div>
       <textarea data-i="${i}" data-f="description" rows="2">${esc(t.description || '')}</textarea>
+      <label style="margin:6px 0 2px;font-size:.7rem">✅ Kriterijumi prihvatanja — QA testira tačno ovo, jedan po redu (slobodno dopiši svoje)</label>
+      <textarea data-i="${i}" data-f="acceptance" rows="${Math.max(2, (t.acceptance || []).length)}" placeholder="npr: Lista se učitava i prikazuje podatke&#10;Nevalidan unos prikazuje poruku, ne ruši ekran">${esc((t.acceptance || []).join('\n'))}</textarea>
       <div class="row" style="margin-top:6px;align-items:center">
         <label style="margin:0;flex:0 0 auto">🔗 zavisi od taskova:</label>
         <input type="text" data-i="${i}" data-f="dependsOn" placeholder="npr. 1,3" value="${escAttr((t.dependsOn || []).join(','))}" style="flex:0 0 110px">
@@ -673,6 +712,7 @@ function handlePlanEdit(e) {
   if (el.dataset.i == null || !el.dataset.f) return;
   const t = planDraft[Number(el.dataset.i)];
   if (el.dataset.f === 'dependsOn') t.dependsOn = el.value.split(/[,\s]+/).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  else if (el.dataset.f === 'acceptance') t.acceptance = el.value.split('\n').map((s) => s.trim()).filter(Boolean);
   else t[el.dataset.f] = el.value;
 }
 $('planList').addEventListener('click', (e) => {
@@ -754,6 +794,47 @@ function renderAgents() {
     </div>`).join('');
 }
 
+// ---------- live agent work streams ----------
+const R_LABEL = { programmer: 'Programer', reviewer: 'Team Lead', qa: 'QA' };
+function activityLineHtml(e) {
+  if (e.kind === 'write') {
+    const preview = e.text ? `<pre class="code">${esc(e.text)}</pre>` : '';
+    return `<div class="ln write"><span class="ic">📝</span>${esc(e.file || 'fajl')}${preview}</div>`;
+  }
+  if (e.kind === 'cmd') return `<div class="ln cmd"><span class="ic">▶</span>${esc(e.text || '')}</div>`;
+  if (e.kind === 'read') return `<div class="ln read"><span class="ic">📖</span>${esc(e.file || e.text || '')}</div>`;
+  if (e.kind === 'result') return `<div class="ln result${e.error ? ' err' : ''}"><span class="ic">↳</span>${esc(e.text || '')}</div>`;
+  if (e.kind === 'note') return `<div class="ln note">${esc(e.text || '')}</div>`;
+  if (e.kind === 'text') return `<div class="ln text"><span class="ic">💬</span>${esc(e.text || '')}</div>`;
+  return `<div class="ln tool"><span class="ic">🔧</span>${esc(e.tool || '')} ${esc(e.text || '')}</div>`;
+}
+function laneStatus(a) {
+  return a.status === 'working' ? 'radi #' + a.currentTaskId : a.status === 'done' ? 'završio' : 'čeka';
+}
+function renderStreams() {
+  const el = $('agentStreams');
+  const agents = (state.agents || []).filter((a) => (a.activity && a.activity.length) || a.status === 'working');
+  if (!agents.length) {
+    el.innerHTML = '<span class="streamEmpty">Kad tim krene, ovde vidiš uživo šta svaki programer kuca, koje komande QA pokreće i šta team lead pregleda.</span>';
+    return;
+  }
+  el.innerHTML = agents.map((a) => `
+    <div class="lane ${a.status === 'working' ? 'working' : ''}" data-lane="${a.id}">
+      <div class="lh"><span class="dot"></span>${esc(a.name)}<span class="rolebadge r-${a.role}">${R_LABEL[a.role]}</span><span class="lst">${laneStatus(a)}</span></div>
+      <div class="feed" id="feed-${a.id}">${(a.activity || []).map(activityLineHtml).join('') || '<span class="streamEmpty">…</span>'}</div>
+    </div>`).join('');
+  for (const a of agents) { const f = $('feed-' + a.id); if (f) f.scrollTop = f.scrollHeight; }
+}
+function appendActivity(agentId, entry) {
+  const feed = $('feed-' + agentId);
+  if (!feed) { renderStreams(); return; } // lane not yet present
+  const empty = feed.querySelector('.streamEmpty');
+  if (empty) empty.remove();
+  const atBottom = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 40;
+  feed.insertAdjacentHTML('beforeend', activityLineHtml(entry));
+  if (atBottom) feed.scrollTop = feed.scrollHeight;
+}
+
 let agentDialogId = null;
 function openAgent(id) {
   agentDialogId = id;
@@ -782,7 +863,7 @@ function renderBoard() {
     return `<div class="col"><h3>${title}<span>${items.length}</span></h3>` + items.map((t) => `
       <div class="card s-${t.status}" onclick="openTask(${t.id})" ${draggable(t) ? `draggable="true" ondragstart="dragTask(event,${t.id})"` : ''}>
         <div>${t.pinnedTo ? '📌 ' : ''}#${t.id} ${esc(t.title)}${t.status === 'needs_fix' ? ' 🔴 popravka' : ''}${t.status === 'stuck' ? ' ⚠ STUCK' : ''}${t.status === 'awaiting_merge' ? ' ✋ čeka merge' : ''}</div>
-        <div class="meta"><span>👤 ${t.assignee || '—'}</span><span>🔁 rev ${t.reviewCycles}</span><span>🧪 qa ${t.qaCycles}</span>${depsOf(t)}${costOf(t)}</div>
+        <div class="meta"><span>👤 ${t.assignee || '—'}</span><span>🔁 rev ${t.reviewCycles}</span><span>🧪 qa ${t.qaCycles}</span>${t.acceptance && t.acceptance.length ? `<span title="kriterijuma prihvatanja">✅ ${t.acceptance.length}</span>` : ''}${depsOf(t)}${costOf(t)}</div>
         ${t.status === 'stuck' ? `<button class="ghost" style="margin-top:7px;width:100%" onclick="event.stopPropagation();retryTask(${t.id})">↻ Pokušaj ponovo</button>` : ''}
         ${t.status === 'awaiting_merge' ? `<button class="primary" style="margin-top:7px;padding:7px" onclick="event.stopPropagation();approveMerge(${t.id})">✓ Merge u main</button>` : ''}
       </div>`).join('') + '</div>';
@@ -907,6 +988,7 @@ function openTask(id) {
     <div class="hint">Status: ${t.status} · Programer: ${t.assignee || '—'} · Review ciklusa: ${t.reviewCycles} · QA: ${t.qaCycles}
     ${t.dependsOn && t.dependsOn.length ? ' · 🔗 zavisi od #' + t.dependsOn.join(', #') : ''}
     ${u.calls ? ` · ~$${(u.costUsd || 0).toFixed(3)} (${u.calls} poziva)` : ''}<br>Fajlovi: ${(t.changedFiles || []).map(esc).join(', ') || '—'}</div>
+    ${(t.acceptance && t.acceptance.length) ? `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">✅ Kriterijumi prihvatanja (QA test plan):</p><div style="font-size:.78rem;line-height:1.6">${t.acceptance.map((c, i) => `${i + 1}. ${esc(c)}`).join('<br>')}</div>` : ''}
     ${(t.history || []).map((h) => `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">${h.role} — ${h.agent}</p><pre>${esc(h.text)}</pre>`).join('')}`;
   taskDialog.showModal();
 }

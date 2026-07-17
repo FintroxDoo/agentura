@@ -23,11 +23,14 @@ export function checkClaudeCode() {
   });
 }
 
+// Keep tool inputs mostly intact so the live "agent work" view can show the
+// code being written / command being run. Only very long strings are capped
+// (2k) — enough for a useful preview without flooding the SSE stream.
 function summarizeInput(input) {
   if (!input || typeof input !== 'object') return input;
   const out = {};
   for (const [k, v] of Object.entries(input)) {
-    out[k] = typeof v === 'string' && v.length > 120 ? `[${v.length} chars]` : v;
+    out[k] = typeof v === 'string' && v.length > 2000 ? v.slice(0, 2000) + `\n…[+${v.length - 2000} chars]` : v;
   }
   return out;
 }
@@ -47,6 +50,7 @@ function runCliStream(args, cwd, onEvent) {
     let buf = '';
     let stderr = '';
     let result = null;
+    const toolById = new Map(); // tool_use_id → tool name, to label tool_results
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       reject(new Error('Claude Code CLI: timeout (20 min)'));
@@ -63,8 +67,21 @@ function runCliStream(args, cwd, onEvent) {
         try { j = JSON.parse(line); } catch { continue; }
         if (j.type === 'assistant' && j.message?.content) {
           for (const b of j.message.content) {
-            if (b.type === 'tool_use') onEvent({ type: 'tool_call', tool: b.name, input: summarizeInput(b.input) });
-            else if (b.type === 'text' && b.text?.trim()) onEvent({ type: 'agent_text', text: b.text });
+            if (b.type === 'tool_use') {
+              toolById.set(b.id, b.name);
+              onEvent({ type: 'tool_call', tool: b.name, input: summarizeInput(b.input) });
+            } else if (b.type === 'text' && b.text?.trim()) onEvent({ type: 'agent_text', text: b.text });
+          }
+        }
+        // tool_result arrives on `user` messages after each tool runs — this is
+        // where command/test output lives, so surface it for the live view.
+        if (j.type === 'user' && j.message?.content) {
+          for (const b of j.message.content) {
+            if (b.type !== 'tool_result') continue;
+            const out = Array.isArray(b.content)
+              ? b.content.map((c) => (typeof c === 'string' ? c : c.text || '')).join('')
+              : String(b.content || '');
+            if (out.trim()) onEvent({ type: 'tool_result', tool: toolById.get(b.tool_use_id), output: out.slice(0, 2000), isError: !!b.is_error });
           }
         }
         if (j.type === 'result') result = j;
