@@ -1,0 +1,1 @@
+# Beleške projekta (harness memorija)
