@@ -1,0 +1,40 @@
+# electron-builder konfiguracija (namerno u zasebnom fajlu, NE u package.json,
+# da se izbegne konflikt sa poljima koje koriste drugi zadaci).
+#
+# Pakuje Agent Harness kao macOS .dmg samo za arm64, bez code signing-a.
+appId: rs.fintrox.agent-harness
+productName: Agent Harness
+
+# Šta ulazi u app bundle. Server je zero-dependency Node kod, pa nema build koraka.
+# Namerno se izostavljaju data/ (runtime podaci), dist/ (build izlaz) i .env (tajne).
+files:
+  - electron/**
+  - server/**
+  - public/**
+  - package.json
+  - "!**/data/**"
+  - "!dist/**"
+  - "!**/.env"
+  - "!**/keys.json"
+
+# Build izlaz ide u dist/ (ignorisan u git-u).
+directories:
+  output: dist
+  # build/ sadrži ikonicu (build/icon.icns); to je electron-builder podrazumevano.
+  buildResources: build
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  # Bez code signing-a — identity: null sprečava electron-builder da traži sertifikat.
+  identity: null
+  category: public.app-category.developer-tools
+  # Ikonica: placeholder build/icon.icns (generisan iz jednobojnog PNG-a preko
+  # sips/iconutil). Ako se fajl ukloni, electron-builder koristi podrazumevanu
+  # Electron ikonicu — build i dalje prolazi.
+  icon: build/icon.icns
+
+# Onemogući auto-otkrivanje/publish; ovo je lokalni build.
+publish: null
