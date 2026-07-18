@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { Orchestrator, RUNS_DIR, ACTIVE_DIR } from './orchestrator.js';
 import { checkClaudeCode } from './claude-code.js';
 import { sendEmail } from './mailer.js';
+import { t, getLang, setLang } from './i18n.js';
 
 const claudeCodeVersion = checkClaudeCode(); // Promise<string|null>
 
@@ -44,7 +45,7 @@ function addSession(id, name, workspacePath = '') {
   const orch = new Orchestrator((evt) => broadcast({ ...evt, sessionId: id }));
   const s = {
     id,
-    name: (name || '').trim() || (workspacePath ? path.basename(workspacePath) : `Projekat ${id.slice(1)}`),
+    name: (name || '').trim() || (workspacePath ? path.basename(workspacePath) : t('Project {n}', { n: id.slice(1) })),
     workspacePath: workspacePath || '',
     orch,
   };
@@ -72,12 +73,12 @@ try {
     addSession(s.id, s.name, s.workspacePath);
   }
 } catch { /* first boot */ }
-if (!sessions.size) createSession('Projekat 1');
+if (!sessions.size) createSession(t('Project {n}', { n: 1 }));
 
 function getSession(url, body = {}) {
   const id = body.sessionId || url.searchParams.get('session') || 's1';
   const s = sessions.get(id);
-  if (!s) { const e = new Error(`Nepoznata sesija: ${id}`); e.statusCode = 404; throw e; }
+  if (!s) { const e = new Error(t('Unknown session: {id}', { id })); e.statusCode = 404; throw e; }
   return s;
 }
 function getOrch(url, body = {}) {
@@ -93,7 +94,7 @@ function sessionSummaries() {
 // Bind a session to its project directory (once) and tell all UIs.
 async function bindSessionWorkspace(s, ws, { rename = true } = {}) {
   s.workspacePath = ws;
-  if (rename && /^Projekat \d+$/.test(s.name)) s.name = path.basename(ws);
+  if (rename && /^(?:Projekat|Project) \d+$/.test(s.name)) s.name = path.basename(ws);
   await saveSessions();
   broadcast({ type: 'session_updated', session: { id: s.id, name: s.name, workspacePath: s.workspacePath } });
 }
@@ -175,6 +176,7 @@ const server = http.createServer(async (req, res) => {
       });
       const hello = {
         type: 'hello',
+        lang: getLang(),
         sessions: [...sessions.values()].map((s) => ({ id: s.id, name: s.name, workspacePath: s.workspacePath, state: s.orch.state() })),
       };
       res.write(`data: ${JSON.stringify(hello)}\n\n`);
@@ -195,8 +197,8 @@ const server = http.createServer(async (req, res) => {
         if (body.createDir) await fs.mkdir(ws, { recursive: true });
         try {
           const st = await fs.stat(ws);
-          if (!st.isDirectory()) return json(res, 400, { error: 'Putanja nije folder' });
-        } catch { return json(res, 400, { error: `Folder ne postoji: ${ws}` }); }
+          if (!st.isDirectory()) return json(res, 400, { error: t('Path is not a directory') });
+        } catch { return json(res, 400, { error: t('Directory does not exist: {ws}', { ws }) }); }
       }
       const s = createSession(body.name, ws);
       broadcast({ type: 'session_created', session: { id: s.id, name: s.name, workspacePath: s.workspacePath, state: s.orch.state() } });
@@ -206,29 +208,29 @@ const server = http.createServer(async (req, res) => {
     if (/^\/api\/sessions\/[^/]+\/workspace$/.test(url.pathname) && req.method === 'POST') {
       const id = url.pathname.split('/')[3];
       const s = sessions.get(id);
-      if (!s) return json(res, 404, { error: 'Nepoznata sesija' });
+      if (!s) return json(res, 404, { error: t('Unknown session') });
       if (s.orch.phase === 'running' || s.orch.phase === 'planning') {
-        return json(res, 400, { error: 'Sesija je aktivna — folder ne može da se menja usred rada' });
+        return json(res, 400, { error: t('Session is active — the directory cannot be changed mid-run') });
       }
       const body = await readBody(req);
       let ws = (body.workspacePath || '').trim();
-      if (!ws) return json(res, 400, { error: 'Nedostaje workspacePath' });
+      if (!ws) return json(res, 400, { error: t('Missing workspacePath') });
       ws = path.resolve(ws);
       if (body.createDir) await fs.mkdir(ws, { recursive: true });
       try {
         const st = await fs.stat(ws);
-        if (!st.isDirectory()) return json(res, 400, { error: 'Putanja nije folder' });
-      } catch { return json(res, 400, { error: `Folder ne postoji: ${ws}` }); }
+        if (!st.isDirectory()) return json(res, 400, { error: t('Path is not a directory') });
+      } catch { return json(res, 400, { error: t('Directory does not exist: {ws}', { ws }) }); }
       await bindSessionWorkspace(s, ws);
       return json(res, 200, { ok: true, workspacePath: s.workspacePath, name: s.name });
     }
     if (url.pathname.startsWith('/api/sessions/') && req.method === 'DELETE') {
       const id = url.pathname.slice('/api/sessions/'.length);
       const s = sessions.get(id);
-      if (!s) return json(res, 404, { error: 'Nepoznata sesija' });
-      if (sessions.size === 1) return json(res, 400, { error: 'Poslednji tab ne može da se zatvori' });
+      if (!s) return json(res, 404, { error: t('Unknown session') });
+      if (sessions.size === 1) return json(res, 400, { error: t('The last tab cannot be closed') });
       if (s.orch.phase === 'running' || s.orch.phase === 'planning') {
-        return json(res, 400, { error: 'Projekat je aktivan — prvo ga zaustavi (■)' });
+        return json(res, 400, { error: t('Project is active — stop it first (■)') });
       }
       sessions.delete(id);
       await saveSessions();
@@ -240,10 +242,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/tree' && req.method === 'GET') {
       const s = getSession(url);
       const loc = insideWorkspace(s, url.searchParams.get('path') || '.');
-      if (!loc) return json(res, 400, { error: 'Sesija nema vezan folder (ili je putanja van njega)' });
+      if (!loc) return json(res, 400, { error: t('Session has no bound directory (or the path is outside it)') });
       let entries;
       try { entries = await fs.readdir(loc.p, { withFileTypes: true }); }
-      catch (err) { return json(res, 400, { error: `Ne mogu da otvorim: ${err.message}` }); }
+      catch (err) { return json(res, 400, { error: t('Cannot open: {msg}', { msg: err.message }) }); }
       const HIDE = new Set(['node_modules', '.git', '.DS_Store']);
       const dirs = [], files = [];
       for (const e of entries) {
@@ -260,7 +262,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/file' && req.method === 'GET') {
       const s = getSession(url);
       const loc = insideWorkspace(s, url.searchParams.get('path') || '');
-      if (!loc) return json(res, 400, { error: 'Putanja je van radnog foldera sesije' });
+      if (!loc) return json(res, 400, { error: t('Path is outside the session workspace') });
       try {
         const st = await fs.stat(loc.p);
         if (st.size > 300_000) return json(res, 200, { path: loc.p, tooBig: true, size: st.size });
@@ -296,7 +298,7 @@ const server = http.createServer(async (req, res) => {
       try {
         entries = await fs.readdir(dir, { withFileTypes: true });
       } catch (err) {
-        return json(res, 400, { error: `Ne mogu da otvorim folder: ${err.message}` });
+        return json(res, 400, { error: t('Cannot open directory: {msg}', { msg: err.message }) });
       }
       const dirs = entries
         .filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
@@ -317,7 +319,7 @@ const server = http.createServer(async (req, res) => {
         reviewer: ENG(body.engines?.reviewer) || engine,
         qa: ENG(body.engines?.qa) || engine,
       };
-      if (Object.values(engines).includes('kimi') && !kimiKey()) return json(res, 400, { error: 'KIMI_API_KEY nije postavljen u .env' });
+      if (Object.values(engines).includes('kimi') && !kimiKey()) return json(res, 400, { error: t('KIMI_API_KEY is not set in .env') });
       // Claude Code accepts aliases (sonnet/opus/haiku) or empty = session default
       const DFLT = { 'claude-code': '', kimi: 'kimi-for-coding-highspeed', api: 'claude-sonnet-4-5' };
       const models = body.models || {};
@@ -341,7 +343,7 @@ const server = http.createServer(async (req, res) => {
         notifyEmail: (body.notifyEmail || '').trim(),
       };
       const goal = (body.goal || '').trim();
-      if (!goal) return json(res, 400, { error: 'Opiši zadatak (cilj) za tim.' });
+      if (!goal) return json(res, 400, { error: t('Describe the goal for the team.') });
 
       const orch = sess.orch;
       await orch.plan(cfg, goal);
@@ -357,11 +359,11 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/quick' && req.method === 'POST') {
       const body = await readBody(req);
       const role = ['programmer', 'reviewer', 'qa', 'ask'].includes(body.role) ? body.role : null;
-      if (!role) return json(res, 400, { error: 'Uloga mora biti programmer, reviewer, qa ili ask.' });
+      if (!role) return json(res, 400, { error: t('Role must be programmer, reviewer, qa or ask.') });
       const instruction = (body.instruction || '').trim();
-      if (!instruction) return json(res, 400, { error: 'Opiši šta agent treba da uradi.' });
+      if (!instruction) return json(res, 400, { error: t('Describe what the agent should do.') });
       const engine = ['claude-code', 'kimi'].includes(body.engine) ? body.engine : 'api';
-      if (engine === 'kimi' && !kimiKey()) return json(res, 400, { error: 'KIMI_API_KEY nije postavljen u .env' });
+      if (engine === 'kimi' && !kimiKey()) return json(res, 400, { error: t('KIMI_API_KEY is not set in .env') });
       const model = String(body.model || (engine === 'claude-code' ? '' : engine === 'kimi' ? 'kimi-for-coding-highspeed' : 'claude-sonnet-4-5')).trim();
       const sess = getSession(url, body);
       const cfg = {
@@ -388,7 +390,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/replan' && req.method === 'POST') {
       const body = await readBody(req);
       const feedback = (body.feedback || '').trim();
-      if (!feedback) return json(res, 400, { error: 'Upiši primedbe za novi plan.' });
+      if (!feedback) return json(res, 400, { error: t('Write your objections for the new plan.') });
       const orch = getOrch(url, body);
       orch.replan(feedback);
       return json(res, 200, { ok: true, state: orch.state() });
@@ -454,7 +456,7 @@ const server = http.createServer(async (req, res) => {
       try {
         snap = JSON.parse(await fs.readFile(path.join(ACTIVE_DIR, `${id}.json`), 'utf8'));
       } catch {
-        return json(res, 404, { error: 'Snimak runa ne postoji (možda je već nastavljen ili obrisan)' });
+        return json(res, 404, { error: t('Run snapshot does not exist (already resumed or deleted)') });
       }
       const orch = getOrch(url, body);
       try {
@@ -513,7 +515,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/task-diff' && req.method === 'GET') {
       const orch = getOrch(url);
       const task = orch.tasks.find((t) => t.id === Number(url.searchParams.get('taskId')));
-      if (!task) return json(res, 404, { error: 'Task ne postoji' });
+      if (!task) return json(res, 404, { error: t('Task does not exist') });
       const diff = await orch.diffFor(task, 120_000);
       return json(res, 200, { taskId: task.id, diff });
     }
@@ -561,7 +563,7 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/open-workspace' && req.method === 'POST') {
       const body = await readBody(req).catch(() => ({}));
       const ws = (body.path || getOrch(url, body).config?.workspacePath || '').trim();
-      if (!ws) return json(res, 400, { error: 'Nema aktivnog workspace-a' });
+      if (!ws) return json(res, 400, { error: t('No active workspace') });
       let target = ws;
       try { await fs.access(path.join(ws, 'index.html')); target = path.join(ws, 'index.html'); } catch { /* open folder */ }
       const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'explorer' : 'xdg-open';
@@ -569,13 +571,25 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, target });
     }
 
+    // UI language (en default / sr) — persisted server-side so orchestrator
+    // messages and emails follow the same setting as the web UI chrome.
+    if (url.pathname === '/api/lang' && req.method === 'GET') {
+      return json(res, 200, { lang: getLang() });
+    }
+    if (url.pathname === '/api/lang' && req.method === 'POST') {
+      const body = await readBody(req);
+      const lang = await setLang(body.lang);
+      broadcast({ type: 'lang_changed', lang });
+      return json(res, 200, { ok: true, lang });
+    }
+
     if (url.pathname === '/api/test-email' && req.method === 'POST') {
       const body = await readBody(req);
       try {
         await sendEmail({
           to: body.to,
-          subject: 'Agent Harness — test email',
-          text: 'Resend konfiguracija radi. Ovde će stići notifikacija kad agenti završe taskove.',
+          subject: t('Agentura — test email'),
+          text: t('Resend configuration works. Notifications will arrive here when agents finish tasks.'),
         });
         return json(res, 200, { ok: true });
       } catch (err) {
@@ -610,9 +624,9 @@ function clampInt(v, min, max, dflt) {
 // localhost by default; set HOST=0.0.0.0 explicitly for LAN/VPN (Tailscale) use.
 const HOST = process.env.HOST || '127.0.0.1';
 server.listen(PORT, HOST, () => {
-  console.log(`\n  Agent Harness ▸ http://localhost:${PORT}  (bind: ${HOST})\n`);
-  if (HOST !== '127.0.0.1') console.log('  ⚠ Server je dostupan van ove mašine — svako sa mreže može da izvršava komande!');
-  console.log(apiKey() ? '  ANTHROPIC_API_KEY: postavljen ✓' : '  ANTHROPIC_API_KEY: nije postavljen → MOCK mod (dodaj ga u .env)');
-  console.log(kimiKey() ? '  KIMI_API_KEY: postavljen ✓ (Kimi motor dostupan)' : '  KIMI_API_KEY: nije postavljen (Kimi motor isključen)');
-  console.log('  Email: Resend' + (process.env.RESEND_API_KEY ? ' (env ključ) ✓' : ' (nedostaje RESEND_API_KEY u .env)'));
+  console.log(`\n  Agentura ▸ http://localhost:${PORT}  (bind: ${HOST})\n`);
+  if (HOST !== '127.0.0.1') console.log('  ⚠ Server is reachable from other machines — anyone on the network can execute commands!');
+  console.log(apiKey() ? '  ANTHROPIC_API_KEY: set ✓' : '  ANTHROPIC_API_KEY: not set → MOCK mode (add it to .env)');
+  console.log(kimiKey() ? '  KIMI_API_KEY: set ✓ (Kimi engine available)' : '  KIMI_API_KEY: not set (Kimi engine disabled)');
+  console.log('  Email: Resend' + (process.env.RESEND_API_KEY ? ' (env key) ✓' : ' (RESEND_API_KEY missing in .env)'));
 });

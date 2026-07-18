@@ -8,3 +8,6 @@ workspace-*/
 .hwt-*/
 dist/
 out/
+
+# per-workspace agent memory — internal notes, not for the public repo
+HARNESS-NOTES.md

@@ -1,9 +1,10 @@
 {
-  "name": "agent-harness",
+  "name": "agentura",
   "version": "1.0.0",
-  "description": "Multi-agent dev team harness: programmer agents, team-lead review loop, QA agents, email notification. Zero dependencies.",
+  "description": "Agentura — orchestrate a team of AI agents (programmers, team-lead reviewer, QA) that plan, build, review, test and merge real code. Zero runtime dependencies.",
   "type": "module",
   "main": "electron/main.js",
+  "license": "FSL-1.1-Apache-2.0",
   "scripts": {
     "start": "node server/index.js",
     "start:electron": "electron .",

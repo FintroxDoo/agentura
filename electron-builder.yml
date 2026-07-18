@@ -2,8 +2,8 @@
 # da se izbegne konflikt sa poljima koje koriste drugi zadaci).
 #
 # Pakuje Agent Harness kao macOS .dmg samo za arm64, bez code signing-a.
-appId: rs.fintrox.agent-harness
-productName: Agent Harness
+appId: rs.fintrox.agentura
+productName: Agentura
 
 # Šta ulazi u app bundle. Server je zero-dependency Node kod, pa nema build koraka.
 # Namerno se izostavljaju data/ (runtime podaci), dist/ (build izlaz) i .env (tajne).
