@@ -1,6 +1,25 @@
 # Agentura — your AI dev team
 
-Agentura orchestrates a **team of AI agents** that build software together, the way a real team does:
+Agentura orchestrates a **team of AI agents** that build software together, the way a real team does: the team lead plans and reviews, programmers build in parallel, QA verifies every acceptance criterion — and you approve the plan and watch it all live.
+
+<p align="center">
+  <img src="docs/screenshots/run-live.png" alt="Agentura mid-run: parallel programmers, task board with dependency graph, live log" width="920">
+</p>
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/plan-approval.png" alt="Task plan with acceptance criteria awaiting your approval" width="100%"><br>
+      <sub>The team lead's plan — editable tasks + acceptance criteria, awaiting your approval</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/screenshots/run-finished.png" alt="Finished run: all tasks done, reviewed, QA-passed and merged" width="100%"><br>
+      <sub>Run finished — every task reviewed, QA-passed and merged</sub>
+    </td>
+  </tr>
+</table>
+
+## How it works
 
 ```
 GOAL ──► TEAM LEAD (plan) ──► 📋 PLAN → your APPROVAL (edit / object / OK)
