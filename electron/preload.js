@@ -3,7 +3,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('harness', {
-  // Returns { anthropicKey, kimiKey } for prefilling the fields when the setup screen opens.
+  // Returns { anthropicKey, kimiKey, resendKey } for prefilling the fields when the setup screen opens.
   getKeys: () => ipcRenderer.invoke('keys:get'),
 
   // Saves the keys; the main process then restarts the server and switches the window to the main UI.

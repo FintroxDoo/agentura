@@ -68,6 +68,14 @@
     (Moonshot / Kimi) with a <b>Kimi For Coding</b> subscription.
   </div>
 
+  <label for="resendKey">Resend API key (RESEND_API_KEY) — optional</label>
+  <input type="password" id="resendKey" placeholder="re_..." autocomplete="off" spellcheck="false">
+  <div class="hint">
+    For email notifications (run finished, limit hit, stuck tasks). Get it at
+    <a href="https://resend.com" target="_blank" rel="noopener">resend.com</a> → <b>API Keys</b>.
+    Without a verified domain, Resend only delivers to the account owner's email.
+  </div>
+
   <button class="primary" id="continueBtn" disabled>Continue</button>
 
   <div class="status" id="status"><span class="spinner"></span><span>Restarting the server…</span></div>
@@ -78,6 +86,7 @@
 <script>
   const anthropicKey = document.getElementById('anthropicKey');
   const kimiKey = document.getElementById('kimiKey');
+  const resendKey = document.getElementById('resendKey');
   const continueBtn = document.getElementById('continueBtn');
   const status = document.getElementById('status');
 
@@ -96,6 +105,7 @@
       if (keys && typeof keys === 'object') {
         anthropicKey.value = keys.anthropicKey || '';
         kimiKey.value = keys.kimiKey || '';
+        resendKey.value = keys.resendKey || '';
       }
     } catch (e) {
       console.error('getKeys failed:', e);
@@ -112,6 +122,7 @@
         await window.harness.saveKeys({
           anthropicKey: anthropicKey.value.trim(),
           kimiKey: kimiKey.value.trim(),
+          resendKey: resendKey.value.trim(),
         });
       }
       // The main process restarts the server itself and switches the window to the main UI.

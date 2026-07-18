@@ -2,7 +2,7 @@
 //
 // Responsibilities:
 //   1. Find a free TCP port (net server on port 0 → read port → close).
-//   2. Load API keys from <userData>/keys.json ({"anthropicKey":"...","kimiKey":"..."}).
+//   2. Load API keys from <userData>/keys.json ({"anthropicKey":"...","kimiKey":"...","resendKey":"..."}).
 //   3. Spawn server/index.js as a child (process.execPath + ELECTRON_RUN_AS_NODE=1)
 //      with PORT=<free port> and HARNESS_DATA_DIR=<userData>, forwarding the whole
 //      existing process.env (so CLAUDE_CODE_OAUTH_TOKEN passes through untouched).
@@ -46,7 +46,7 @@ function keysPath() {
   return path.join(app.getPath('userData'), 'keys.json');
 }
 
-// Returns { anthropicKey, kimiKey } — empty strings when absent. Never logs values.
+// Returns { anthropicKey, kimiKey, resendKey } — empty strings when absent. Never logs values.
 function readKeys() {
   try {
     const raw = fs.readFileSync(keysPath(), 'utf8');
@@ -54,16 +54,18 @@ function readKeys() {
     return {
       anthropicKey: (j.anthropicKey || '').trim(),
       kimiKey: (j.kimiKey || '').trim(),
+      resendKey: (j.resendKey || '').trim(),
     };
   } catch {
-    return { anthropicKey: '', kimiKey: '' };
+    return { anthropicKey: '', kimiKey: '', resendKey: '' };
   }
 }
 
-function writeKeys({ anthropicKey, kimiKey }) {
+function writeKeys({ anthropicKey, kimiKey, resendKey }) {
   const data = JSON.stringify({
     anthropicKey: (anthropicKey || '').trim(),
     kimiKey: (kimiKey || '').trim(),
+    resendKey: (resendKey || '').trim(),
   });
   const file = keysPath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -96,6 +98,7 @@ async function startServer() {
   // Only inject keys when non-empty; empty values must not clobber env-provided keys.
   if (keys.anthropicKey) env.ANTHROPIC_API_KEY = keys.anthropicKey;
   if (keys.kimiKey) env.KIMI_API_KEY = keys.kimiKey;
+  if (keys.resendKey) env.RESEND_API_KEY = keys.resendKey;
 
   serverProcess = spawn(process.execPath, [SERVER_ENTRY], {
     env,
@@ -164,8 +167,8 @@ function createWindow() {
 // ---- IPC handlers. Key values are never logged.
 ipcMain.handle('keys:get', () => readKeys());
 
-ipcMain.handle('keys:save', async (_e, { anthropicKey, kimiKey } = {}) => {
-  writeKeys({ anthropicKey, kimiKey });
+ipcMain.handle('keys:save', async (_e, { anthropicKey, kimiKey, resendKey } = {}) => {
+  writeKeys({ anthropicKey, kimiKey, resendKey });
   killServer();
   await startServer();
   loadMain();
