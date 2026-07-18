@@ -3,6 +3,7 @@
 // email) without spending tokens.
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { t } from './i18n.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -10,23 +11,23 @@ export async function runMockEpisode({ role, task, attempt, workspace, onEvent =
   await sleep(1500 + Math.random() * 2000);
 
   if (role === 'planner') {
-    const goal = (task.title || 'projekat').slice(0, 80);
+    const goal = (task.title || t('project')).slice(0, 80);
     const plan = [
-      { title: 'Postavi osnovnu strukturu projekta', description: `Inicijalna struktura i konfiguracija za: ${goal}.`,
-        acceptance: ['Projekat ima jasnu strukturu foldera', 'Konfiguracioni fajlovi postoje i validni su'] },
-      { title: 'Implementiraj glavnu funkcionalnost', description: `Jezgro funkcionalnosti za: ${goal}.`, dependsOn: [1],
-        acceptance: ['Glavna funkcionalnost radi na primeru', 'Nevalidan unos ne ruši aplikaciju'] },
-      { title: 'Dodaj testove i dokumentaciju', description: `Osnovni testovi i README za: ${goal}.`, dependsOn: [1],
-        acceptance: ['Testovi prolaze', 'README opisuje pokretanje'] },
+      { title: t('Set up the basic project structure'), description: t('Initial structure and configuration for: {goal}.', { goal }),
+        acceptance: [t('The project has a clear folder structure'), t('Configuration files exist and are valid')] },
+      { title: t('Implement the main functionality'), description: t('Core functionality for: {goal}.', { goal }), dependsOn: [1],
+        acceptance: [t('The main functionality works on an example'), t('Invalid input does not crash the application')] },
+      { title: t('Add tests and documentation'), description: t('Basic tests and a README for: {goal}.', { goal }), dependsOn: [1],
+        acceptance: [t('Tests pass'), t('The README describes how to run the project')] },
     ];
-    const text = `Predlog plana (MOCK simulacija — bez API ključa).\n\n\`\`\`json\n${JSON.stringify(plan, null, 2)}\n\`\`\``;
+    const text = `${t('Plan proposal (MOCK simulation — no API key).')}\n\n\`\`\`json\n${JSON.stringify(plan, null, 2)}\n\`\`\``;
     onEvent({ type: 'agent_text', text });
     return { text, changedFiles: [], iterations: 1 };
   }
 
   if (role === 'programmer') {
     const file = `task-${task.id}-solution.md`;
-    onEvent({ type: 'agent_text', text: `Analiziram task "${task.title}" i pravim plan implementacije…` });
+    onEvent({ type: 'agent_text', text: t('Analyzing task "{title}" and drafting an implementation plan…', { title: task.title }) });
     await sleep(600);
     onEvent({ type: 'tool_call', tool: 'read_file', input: { path: 'README.md' } });
     await sleep(500);
@@ -37,7 +38,7 @@ export async function runMockEpisode({ role, task, attempt, workspace, onEvent =
     await sleep(700);
     onEvent({ type: 'tool_call', tool: 'run_command', input: { command: `node -e "require('./${file}')" || true` } });
     await sleep(500);
-    onEvent({ type: 'tool_result', tool: 'run_command', output: 'OK (mock) — nema grešaka pri izvršavanju.' });
+    onEvent({ type: 'tool_result', tool: 'run_command', output: t('OK (mock) — no errors during execution.') });
     await sleep(400);
     const text =
       attempt === 1
@@ -48,7 +49,7 @@ export async function runMockEpisode({ role, task, attempt, workspace, onEvent =
   }
 
   if (role === 'reviewer') {
-    onEvent({ type: 'agent_text', text: `Čitam izmene i proveravam ispravnost za "${task.title}"…` });
+    onEvent({ type: 'agent_text', text: t('Reading the changes and checking correctness for "{title}"…', { title: task.title }) });
     await sleep(500);
     onEvent({ type: 'tool_call', tool: 'run_command', input: { command: 'git diff --stat' } });
     await sleep(500);
@@ -64,7 +65,7 @@ export async function runMockEpisode({ role, task, attempt, workspace, onEvent =
   }
 
   // qa
-  onEvent({ type: 'agent_text', text: `Pokrećem smoke provere za "${task.title}"…` });
+  onEvent({ type: 'agent_text', text: t('Running smoke checks for "{title}"…', { title: task.title }) });
   await sleep(500);
   onEvent({ type: 'tool_call', tool: 'run_command', input: { command: 'npm test' } });
   await sleep(800);

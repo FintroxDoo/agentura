@@ -1,4 +1,4 @@
-// Electron main process for Agent Harness.
+// Electron main process for Agentura.
 //
 // Responsibilities:
 //   1. Find a free TCP port (net server on port 0 → read port → close).

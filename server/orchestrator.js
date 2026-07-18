@@ -17,6 +17,7 @@ import { runMockEpisode } from './mock.js';
 import { plannerPrompt, programmerPrompt, reviewerPrompt, qaPrompt, integrationQaPrompt, soloReviewerPrompt, soloQaPrompt, soloAskPrompt } from './roles.js';
 import { runCommand } from './tools.js';
 import { sendEmail } from './mailer.js';
+import { t } from './i18n.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const RUNS_DIR = path.join(process.env.HARNESS_DATA_DIR || path.join(__dirname, '..', 'data'), 'runs');
@@ -63,8 +64,8 @@ export class Orchestrator {
     const to = this.config?.notifyEmail;
     if (!to) return;
     sendEmail({ to, subject, text })
-      .then(() => this.logMsg('Orkestrator', `📧 Email poslat na ${to}: ${subject}`))
-      .catch((err) => this.logMsg('Orkestrator', `📧 Slanje emaila nije uspelo: ${err.message}`));
+      .then(() => this.logMsg(t('Orchestrator'), t('📧 Email sent to {to}: {subject}', { to, subject })))
+      .catch((err) => this.logMsg(t('Orchestrator'), t('📧 Sending the email failed: {msg}', { msg: err.message })));
   }
 
   reset() {
@@ -160,9 +161,9 @@ export class Orchestrator {
     const L = (e) => e === 'claude-code' ? 'Claude Code' : e === 'kimi' ? 'Kimi' : (this.config?.apiKey ? 'Claude API' : 'MOCK');
     const e = { p: this.engineFor('programmer'), r: this.engineFor('reviewer'), q: this.engineFor('qa') };
     if (e.p === e.r && e.r === e.q) {
-      return L(e.p) + (e.p === 'claude-code' || e.p === 'kimi' ? ' (pretplata)' : '');
+      return L(e.p) + (e.p === 'claude-code' || e.p === 'kimi' ? t(' (subscription)') : '');
     }
-    return `mix — programeri: ${L(e.p)}, lead: ${L(e.r)}, QA: ${L(e.q)}`;
+    return t('mix — programmers: {p}, lead: {r}, QA: {q}', { p: L(e.p), r: L(e.r), q: L(e.q) });
   }
 
   setPhase(phase) {
@@ -191,7 +192,7 @@ export class Orchestrator {
   // ------------------------------------------------------------ planning
   async plan(config, goal) {
     if (this.phase === 'planning' || this.phase === 'running') {
-      throw new Error('Planiranje ili run je već u toku');
+      throw new Error(t('Planning or a run is already in progress'));
     }
     this.reset();
     this.config = config;
@@ -200,21 +201,21 @@ export class Orchestrator {
     this.setPhase('planning');
 
     await this.prepareWorkspace();
-    this.logMsg('Orkestrator', `Radni prostor spreman: ${config.workspacePath} (grana: ${this.mainBranch}) — motor: ${this.engineLabel()}`);
+    this.logMsg(t('Orchestrator'), t('Workspace ready: {ws} (branch: {branch}) — engine: {engine}', { ws: config.workspacePath, branch: this.mainBranch, engine: this.engineLabel() }));
 
     // Planner runs async; result arrives via SSE (plan_ready / plan_failed).
     this._runPlanner(null);
   }
 
   replan(feedback) {
-    if (this.phase !== 'awaiting_approval') throw new Error('Nema plana koji čeka odobrenje');
+    if (this.phase !== 'awaiting_approval') throw new Error(t('No plan is awaiting approval'));
     this.setPhase('planning');
     this._runPlanner(feedback);
   }
 
   async _runPlanner(feedback) {
     const name = 'TeamLead-1';
-    this.logMsg(name, feedback ? '🧠 Pravi novi plan uz tvoje primedbe…' : '🧠 Analizira cilj i pravi plan taskova…');
+    this.logMsg(name, feedback ? t('🧠 Drafting a new plan with your objections…') : t('🧠 Analyzing the goal and drafting the task plan…'));
 
     let userMessage =
       `PROJECT GOAL:\n${this.goal}\n\n` +
@@ -258,7 +259,7 @@ export class Orchestrator {
             'Your previous reply did NOT contain a parseable task plan. Do NOT explore or explain further. ' +
             'Reply with ONLY the plan as a single fenced ```json code block — a JSON array of ' +
             '{ "title", "description", "size", "dependsOn", "acceptance" } objects — and NOTHING else before or after it.';
-        if (attempt > 1) this.logMsg(name, `⚠ Plan nije bio u ispravnom JSON formatu — tražim ponovo samo JSON (pokušaj ${attempt}/3)…`);
+        if (attempt > 1) this.logMsg(name, t('⚠ The plan was not valid JSON — asking again for JSON only (attempt {attempt}/3)…', { attempt }));
 
         const result = await runPlanEpisode(msg, sessionId);
         sessionId = result.sessionId || sessionId;
@@ -266,29 +267,29 @@ export class Orchestrator {
         if (this.stopping || this.phase !== 'planning') return; // cancelled meanwhile
         tasks = parsePlanText(result.text);
       }
-      if (!tasks) throw new Error('Planer nije vratio validan JSON plan taskova ni nakon 3 pokušaja');
+      if (!tasks) throw new Error(t('The planner did not return a valid JSON task plan even after 3 attempts'));
 
       this.proposal = tasks;
       this.phase = 'awaiting_approval';
-      this.logMsg(name, `📋 Plan spreman: ${tasks.length} taskova — čeka tvoje odobrenje.`);
+      this.logMsg(name, t('📋 Plan ready: {n} tasks — awaiting your approval.', { n: tasks.length }));
       this.emit('plan_ready', { state: this.state() });
     } catch (err) {
-      this.logMsg('Orkestrator', `✗ Planiranje nije uspelo: ${err.message}`);
+      this.logMsg(t('Orchestrator'), t('✗ Planning failed: {msg}', { msg: err.message }));
       this.phase = 'idle';
       this.emit('plan_failed', { error: err.message, state: this.state() });
       this.notify(
-        '✗ Agent Harness: planiranje nije uspelo',
-        `Planiranje za cilj "${this.goal.slice(0, 120)}" je palo.\n\nGreška: ${err.message.slice(0, 500)}\n\nPokreni planiranje ponovo iz interfejsa.`
+        t('✗ Agentura: planning failed'),
+        t('Planning for goal "{goal}" failed.\n\nError: {msg}\n\nStart planning again from the UI.', { goal: this.goal.slice(0, 120), msg: err.message.slice(0, 500) })
       );
     }
   }
 
   // ---------------------------------------------------------------- start
   async approve(taskInputs) {
-    if (this.phase !== 'awaiting_approval') throw new Error('Nema plana koji čeka odobrenje');
+    if (this.phase !== 'awaiting_approval') throw new Error(t('No plan is awaiting approval'));
     const inputs = (taskInputs && taskInputs.length ? taskInputs : this.proposal)
       .filter((t) => t && t.title && String(t.title).trim());
-    if (!inputs.length) throw new Error('Plan nema nijedan task');
+    if (!inputs.length) throw new Error(t('The plan has no tasks'));
 
     const config = this.config;
     this.stopping = false;
@@ -297,7 +298,7 @@ export class Orchestrator {
     // Create agents
     let id = 0;
     for (let i = 0; i < config.programmers; i++)
-      this.agents.push({ id: ++id, name: `Programer-${i + 1}`, role: 'programmer', status: 'idle', currentTaskId: null, usage: emptyUsage(), lastText: '' });
+      this.agents.push({ id: ++id, name: t('Programmer-{n}', { n: i + 1 }), role: 'programmer', status: 'idle', currentTaskId: null, usage: emptyUsage(), lastText: '' });
     for (let i = 0; i < config.reviewers; i++)
       this.agents.push({ id: ++id, name: `TeamLead-${i + 1}`, role: 'reviewer', status: 'idle', currentTaskId: null, usage: emptyUsage(), lastText: '' });
     for (let i = 0; i < config.qa; i++)
@@ -334,7 +335,11 @@ export class Orchestrator {
     this.phase = 'running';
     this.emit('run_started', { state: this.state() });
     const m = config.models;
-    this.logMsg('Orkestrator', `Plan odobren — run started: ${this.tasks.length} taskova, ${config.programmers} programera, ${config.reviewers} team lead(ova), ${config.qa} QA. Motor: ${this.engineLabel()}${this.isMock ? '' : ` — modeli: ${m.programmer || '(default)'}/${m.reviewer || '(default)'}/${m.qa || '(default)'}`}`);
+    this.logMsg(t('Orchestrator'), t('Plan approved — run started: {tasks} tasks, {programmers} programmers, {reviewers} team lead(s), {qa} QA. Engine: {engine}{models}', {
+      tasks: this.tasks.length, programmers: config.programmers, reviewers: config.reviewers, qa: config.qa,
+      engine: this.engineLabel(),
+      models: this.isMock ? '' : t(' — models: {p}/{r}/{q}', { p: m.programmer || '(default)', r: m.reviewer || '(default)', q: m.qa || '(default)' }),
+    }));
     this.startWorkers();
     this.saveSnapshot().catch(() => {});
   }
@@ -344,7 +349,7 @@ export class Orchestrator {
   // implements a task, a team lead reviews/analyzes, or a QA verifies.
   async quickRun(config, role, instruction) {
     if (this.phase === 'planning' || this.phase === 'running') {
-      throw new Error('Planiranje ili run je već u toku');
+      throw new Error(t('Planning or a run is already in progress'));
     }
     this.reset();
     this.config = config;
@@ -355,7 +360,7 @@ export class Orchestrator {
 
     await this.prepareWorkspace();
 
-    const names = { programmer: 'Programer-1', reviewer: 'TeamLead-1', qa: 'QA-1', ask: 'TeamLead-1' };
+    const names = { programmer: t('Programmer-{n}', { n: 1 }), reviewer: 'TeamLead-1', qa: 'QA-1', ask: 'TeamLead-1' };
     // 'ask' runs as the team lead (reviewer engine/model) but only ANSWERS.
     const agentRole = role === 'ask' ? 'reviewer' : role;
     const agent = { id: 1, name: names[role], role: agentRole, status: 'idle', currentTaskId: null, usage: emptyUsage(), lastText: '' };
@@ -374,8 +379,8 @@ export class Orchestrator {
 
     this.phase = 'running';
     this.emit('run_started', { state: this.state() });
-    const roleLabel = { programmer: 'programer', reviewer: 'team lead (review/analiza)', qa: 'QA', ask: 'team lead (odgovor na pitanje)' }[role];
-    this.logMsg('Orkestrator', `⚡ Solo run: ${roleLabel} — motor: ${this.engineLabel()}, workspace: ${config.workspacePath}`);
+    const roleLabel = { programmer: t('programmer'), reviewer: t('team lead (review/analysis)'), qa: 'QA', ask: t('team lead (answer to a question)') }[role];
+    this.logMsg(t('Orchestrator'), t('⚡ Solo run: {role} — engine: {engine}, workspace: {ws}', { role: roleLabel, engine: this.engineLabel(), ws: config.workspacePath }));
     this._runSolo(agent, this.tasks[0], role); // fires async; result arrives via SSE
   }
 
@@ -403,25 +408,25 @@ export class Orchestrator {
         // Solo programmer works directly on the main branch — commit the result.
         const changed = (await runCommand(ws, 'git status --porcelain')).trim();
         if (changed && !changed.startsWith('ERROR')) {
-          await runCommand(ws, `git add -A && git -c user.email=harness@local -c user.name="Agent Harness" commit -qm ${JSON.stringify(`solo: ${this.goal.slice(0, 70)}`)}`);
+          await runCommand(ws, `git add -A && git -c user.email=harness@local -c user.name="Agentura" commit -qm ${JSON.stringify(`solo: ${this.goal.slice(0, 70)}`)}`);
           task.changedFiles = changed.split('\n').map((l) => l.slice(2).trim()).filter(Boolean);
-          this.logMsg(agent.name, `✓ Izmene komitovane (${task.changedFiles.length} fajlova)`);
+          this.logMsg(agent.name, t('✓ Changes committed ({n} files)', { n: task.changedFiles.length }));
         } else {
-          this.logMsg(agent.name, '⚠ Nema izmena fajlova — agent je odgovorio bez koda');
+          this.logMsg(agent.name, t('⚠ No file changes — the agent replied without code'));
         }
       }
       if (role === 'qa') {
         failed = lastVerdict(result.text) === 'FAILED';
-        this.logMsg(agent.name, failed ? '❌ VERDICT: FAILED — detalji u izveštaju' : '✅ VERDICT: PASSED');
+        this.logMsg(agent.name, failed ? t('❌ VERDICT: FAILED — details in the report') : '✅ VERDICT: PASSED');
       }
       this.updateTask(task, { status: 'done', lastSummary: result.text, feedback: failed ? result.text : null, feedbackSource: failed ? 'qa' : null });
       this.setAgent(agent, 'done');
       await this._finishSolo(role, result.text, failed);
     } catch (err) {
-      this.logMsg(agent.name, `✗ Solo epizoda nije uspela: ${err.message}`);
+      this.logMsg(agent.name, t('✗ Solo episode failed: {msg}', { msg: err.message }));
       this.updateTask(task, { status: 'stuck', feedback: err.message });
       this.setAgent(agent, 'idle');
-      await this._finishSolo(role, `Epizoda nije uspela: ${err.message}`, true);
+      await this._finishSolo(role, t('Episode failed: {msg}', { msg: err.message }), true);
     }
   }
 
@@ -429,24 +434,25 @@ export class Orchestrator {
     this.finishedAt = Date.now();
     const mins = ((this.finishedAt - this.startedAt) / 60000).toFixed(1);
     const u = this.totalUsage;
-    const roleLabel = { programmer: 'programer', reviewer: 'team lead', qa: 'QA', ask: 'team lead odgovor' }[role];
-    const summary =
-      `Agent Harness — solo ${roleLabel} završen za ${mins} min.${u.costUsd ? ` (~$${u.costUsd.toFixed(2)})` : ''}\n\n` +
-      `Zahtev: ${this.goal}\n\nIZVEŠTAJ:\n${report}\n\nWorkspace: ${this.config.workspacePath}`;
+    const roleLabel = { programmer: t('programmer'), reviewer: 'team lead', qa: 'QA', ask: t('team lead answer') }[role];
+    const summary = t('Agentura — solo {role} finished in {mins} min.{cost}\n\nRequest: {goal}\n\nREPORT:\n{report}\n\nWorkspace: {ws}', {
+      role: roleLabel, mins, cost: u.costUsd ? ` (~$${u.costUsd.toFixed(2)})` : '',
+      goal: this.goal, report, ws: this.config.workspacePath,
+    });
     this.phase = 'finished';
-    this.logMsg('Orkestrator', failed ? 'Solo run završen — NEUSPEŠNO/FAILED (vidi izveštaj).' : 'Solo run završen.');
+    this.logMsg(t('Orchestrator'),failed ? t('Solo run finished — FAILED (see the report).') : t('Solo run finished.'));
     this.emit('run_finished', { summary, done: failed ? 0 : 1, total: 1, stuck: failed ? 1 : 0, usage: u, state: this.state() });
     await this.persistRun(summary, failed ? 0 : 1, failed ? 1 : 0);
     if (this.config.notifyEmail) {
       try {
         await sendEmail({
           to: this.config.notifyEmail,
-          subject: `${failed ? '❌' : '✅'} Agent Harness (solo ${roleLabel}): ${this.goal.slice(0, 60)}`,
+          subject: `${failed ? '❌' : '✅'} ${t('Agentura (solo {role}): {goal}', { role: roleLabel, goal: this.goal.slice(0, 60) })}`,
           text: summary.slice(0, 8000),
         });
-        this.logMsg('Orkestrator', `📧 Izveštaj poslat na ${this.config.notifyEmail}`);
+        this.logMsg(t('Orchestrator'), t('📧 Report sent to {to}', { to: this.config.notifyEmail }));
       } catch (err) {
-        this.logMsg('Orkestrator', `📧 Slanje emaila nije uspelo: ${err.message}`);
+        this.logMsg(t('Orchestrator'), t('📧 Sending the email failed: {msg}', { msg: err.message }));
       }
     }
   }
@@ -462,7 +468,7 @@ export class Orchestrator {
       .then(() => { this.workersRunning = false; this.finishRun(); })
       .catch((err) => {
         this.workersRunning = false;
-        this.logMsg('Orkestrator', `FATAL: ${err.message}`);
+        this.logMsg(t('Orchestrator'), `FATAL: ${err.message}`);
         this.finishRun();
       });
   }
@@ -481,25 +487,25 @@ export class Orchestrator {
         }
       }
     }
-    for (const t of this.tasks) {
-      if (!resolved.has(t.id)) {
-        this.logMsg('Orkestrator', `⚠ Task #${t.id} je deo ciklusa zavisnosti — zavisnosti su mu uklonjene.`);
-        t.dependsOn = [];
+    for (const task of this.tasks) {
+      if (!resolved.has(task.id)) {
+        this.logMsg(t('Orchestrator'), t('⚠ Task #{id} is part of a dependency cycle — its dependencies were removed.', { id: task.id }));
+        task.dependsOn = [];
       }
     }
   }
 
   // ------------------------------------------------------ steering & pause
   steer(taskId, message) {
-    if (!['running', 'finished'].includes(this.phase)) throw new Error('Poruke timu važe tek kad run krene');
+    if (!['running', 'finished'].includes(this.phase)) throw new Error(t('Messages to the team only apply once the run starts'));
     const msg = String(message || '').trim();
-    if (!msg) throw new Error('Prazna poruka');
+    if (!msg) throw new Error(t('Empty message'));
     if (taskId) {
-      const t = this.tasks.find((x) => x.id === taskId);
-      if (!t) throw new Error(`Task #${taskId} ne postoji`);
+      const task = this.tasks.find((x) => x.id === taskId);
+      if (!task) throw new Error(t('Task #{id} does not exist', { id: taskId }));
     }
     this.steerings.push({ taskId: taskId || null, message: msg.slice(0, 2000), ts: Date.now() });
-    this.logMsg('Ti', `📣 ${taskId ? `[task #${taskId}] ` : '[ceo tim] '}${msg.slice(0, 200)}`);
+    this.logMsg(t('You'), `📣 ${taskId ? `[task #${taskId}] ` : t('[whole team] ')}${msg.slice(0, 200)}`);
     this.emit('phase_change', { state: this.state() });
   }
 
@@ -522,24 +528,22 @@ export class Orchestrator {
   pauseForLimit(msg) {
     if (this.pausedUntil > Date.now()) return;
     this.pausedUntil = Date.now() + 15 * 60_000;
-    this.logMsg('Orkestrator', `⏸ Limit plana dostignut — pauziram sve epizode 15 min. (${(msg || '').slice(0, 120)})`);
+    this.logMsg(t('Orchestrator'), t('⏸ Plan limit reached — pausing all episodes for 15 min. ({msg})', { msg: (msg || '').slice(0, 120) }));
     this.emit('phase_change', { state: this.state() });
     const until = new Date(this.pausedUntil).toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' });
     this.notify(
-      '⏸ Agent Harness: limit plana — run pauziran',
-      `Run "${this.goal.slice(0, 120)}" je pauziran jer je dostignut limit Claude plana.\n\n` +
-      `Poruka: ${(msg || '').slice(0, 300)}\n\n` +
-      `Automatski nastavlja u ${until} (pa proverava ponovo na 15 min dok se limit ne resetuje).\n` +
-      `Ako si već dopunio limit/tokene, klikni "▶ Nastavi odmah" u interfejsu — ne moraš da čekaš.\n\n` +
-      `Workspace: ${this.config.workspacePath}`
+      t('⏸ Agentura: plan limit — run paused'),
+      t('Run "{goal}" is paused because the Claude plan limit was reached.\n\nMessage: {msg}\n\nIt resumes automatically at {until} (then re-checks every 15 min until the limit resets).\nIf you have already topped up the limit/tokens, click "▶ Resume now" in the UI — you do not have to wait.\n\nWorkspace: {ws}', {
+        goal: this.goal.slice(0, 120), msg: (msg || '').slice(0, 300), until, ws: this.config.workspacePath,
+      })
     );
   }
 
-  // User clicked "▶ Nastavi odmah" — cut the limit pause short.
+  // User clicked "▶ Resume now" — cut the limit pause short.
   resumePause() {
-    if (this.pausedUntil <= Date.now()) throw new Error('Run nije pauziran');
+    if (this.pausedUntil <= Date.now()) throw new Error(t('The run is not paused'));
     this.pausedUntil = 0;
-    this.logMsg('Orkestrator', '▶ Ručni nastavak — pauza prekinuta, tim nastavlja odmah.');
+    this.logMsg(t('Orchestrator'), t('▶ Manual resume — pause cut short, the team continues immediately.'));
     this.emit('phase_change', { state: this.state() });
   }
 
@@ -549,7 +553,7 @@ export class Orchestrator {
     // guard on pausedUntil !== 0 so a manual resumePause() doesn't double-log
     if (this.pausedUntil && this.pausedUntil <= Date.now()) {
       this.pausedUntil = 0;
-      this.logMsg('Orkestrator', '▶ Pauza istekla — nastavljam rad.');
+      this.logMsg(t('Orchestrator'), t('▶ Pause expired — resuming work.'));
       this.emit('phase_change', { state: this.state() });
     }
     return true;
@@ -558,8 +562,8 @@ export class Orchestrator {
   // ------------------------------------------------------ retry stuck task
   retryTask(taskId) {
     const task = this.tasks.find((t) => t.id === taskId);
-    if (!task) throw new Error(`Task #${taskId} ne postoji`);
-    if (task.status !== 'stuck') throw new Error(`Task #${taskId} nije zaglavljen (status: ${task.status})`);
+    if (!task) throw new Error(t('Task #{id} does not exist', { id: taskId }));
+    if (task.status !== 'stuck') throw new Error(t('Task #{id} is not stuck (status: {status})', { id: taskId, status: task.status }));
 
     // Fresh budget of review/QA cycles; unclaim it so the first free
     // programmer (ideally a different one — fresh perspective) takes it.
@@ -567,7 +571,7 @@ export class Orchestrator {
     task.qaCycles = 0;
     const status = task.attempts > 0 && task.feedback ? 'needs_fix' : 'queued';
     this.updateTask(task, { status, assignee: null, assigneeId: null, pinnedTo: null });
-    this.logMsg('Orkestrator', `↻ Task #${task.id} vraćen u rad (${status}) — uzima ga prvi slobodan programer`);
+    this.logMsg(t('Orchestrator'), t('↻ Task #{id} put back to work ({status}) — the first free programmer takes it', { id: task.id, status }));
 
     if (!this.workersRunning) this.resumeRun();
   }
@@ -575,11 +579,11 @@ export class Orchestrator {
   // Manual drag&drop assignment: pin the task to a specific programmer.
   assignTask(taskId, agentId) {
     const task = this.tasks.find((t) => t.id === taskId);
-    if (!task) throw new Error(`Task #${taskId} ne postoji`);
+    if (!task) throw new Error(t('Task #{id} does not exist', { id: taskId }));
     const agent = this.agents.find((a) => a.id === agentId);
-    if (!agent || agent.role !== 'programmer') throw new Error('Task može da se dodeli samo programeru');
+    if (!agent || agent.role !== 'programmer') throw new Error(t('A task can only be assigned to a programmer'));
     if (!['queued', 'needs_fix', 'stuck'].includes(task.status)) {
-      throw new Error(`Task #${taskId} je u statusu "${task.status}" — ručno se dodeljuje samo task koji čeka, traži popravku ili je zaglavljen`);
+      throw new Error(t('Task #{id} is in status "{status}" — only a queued, needs-fix or stuck task can be assigned manually', { id: taskId, status: task.status }));
     }
     if (task.status === 'stuck') {
       task.reviewCycles = 0;
@@ -587,7 +591,7 @@ export class Orchestrator {
     }
     const status = task.status === 'stuck' ? (task.feedback ? 'needs_fix' : 'queued') : task.status;
     this.updateTask(task, { status, pinnedTo: agent.id, assignee: agent.name, assigneeId: agent.id });
-    this.logMsg('Orkestrator', `👉 Task #${task.id} ručno dodeljen programeru ${agent.name} — uzima ga čim se oslobodi`);
+    this.logMsg(t('Orchestrator'), t('👉 Task #{id} manually assigned to programmer {name} — they take it as soon as they are free', { id: task.id, name: agent.name }));
 
     if (!this.workersRunning) this.resumeRun();
   }
@@ -599,7 +603,7 @@ export class Orchestrator {
     this.finishedAt = null;
     for (const a of this.agents) this.setAgent(a, 'idle');
     this.emit('run_started', { state: this.state() });
-    this.logMsg('Orkestrator', 'Run nastavljen.');
+    this.logMsg(t('Orchestrator'), t('Run resumed.'));
     this.startWorkers();
   }
 
@@ -616,7 +620,7 @@ export class Orchestrator {
     if (cfg.gitUrl) {
       await fs.mkdir(path.dirname(ws), { recursive: true });
       const out = await runCommand(path.dirname(ws), `git clone ${JSON.stringify(cfg.gitUrl)} ${JSON.stringify(ws)}`, 300_000);
-      this.logMsg('Orkestrator', `git clone: ${out.slice(0, 300)}`);
+      this.logMsg(t('Orchestrator'), `git clone: ${out.slice(0, 300)}`);
     } else {
       await fs.mkdir(ws, { recursive: true });
     }
@@ -631,14 +635,14 @@ export class Orchestrator {
     const dirty = (await runCommand(ws, 'git status --porcelain')).trim();
     if (dirty && !dirty.startsWith('ERROR')) {
       await runCommand(ws, 'git add -A && git -c user.email=harness@local -c user.name=harness commit -qm "pre-harness snapshot"');
-      this.logMsg('Orkestrator', 'Zatečene nekomitovane izmene — snimljene kao "pre-harness snapshot" commit.');
+      this.logMsg(t('Orchestrator'), t('Found uncommitted changes — saved as a "pre-harness snapshot" commit.'));
     }
 
     // Project memory: notes file agents read every episode and append lessons
     // to. merge=union so parallel appends from task branches never conflict.
     const notesPath = path.join(ws, NOTES_FILE);
     try { await fs.access(notesPath); } catch {
-      await fs.writeFile(notesPath, '# Beleške projekta (harness memorija)\n');
+      await fs.writeFile(notesPath, t('# Project notes (harness memory)') + '\n');
     }
     const gaPath = path.join(ws, '.gitattributes');
     let ga = '';
@@ -670,10 +674,10 @@ export class Orchestrator {
       const wt = path.join(path.dirname(ws), `.hwt-${path.basename(ws)}-t${task.id}`);
       await runCommand(path.dirname(ws), `rm -rf ${JSON.stringify(wt)}`);
       const out = await runCommand(ws, `git worktree prune; git worktree add -B ${JSON.stringify(branch)} ${JSON.stringify(wt)} ${JSON.stringify(this.mainBranch)}`);
-      if (/fatal:|ERROR/.test(out)) throw new Error(`git worktree add nije uspeo: ${out.slice(0, 300)}`);
+      if (/fatal:|ERROR/.test(out)) throw new Error(t('git worktree add failed: {out}', { out: out.slice(0, 300) }));
       task.worktree = wt;
       task.branch = branch;
-      this.logMsg('Orkestrator', `🌿 Task #${task.id}: radna kopija na grani ${branch}`);
+      this.logMsg(t('Orchestrator'), t('🌿 Task #{id}: working copy on branch {branch}', { id: task.id, branch }));
     });
     return this._gitLock;
   }
@@ -716,11 +720,11 @@ export class Orchestrator {
       const dirty = (await runCommand(ws, 'git status --porcelain')).trim();
       if (dirty && !dirty.startsWith('ERROR')) {
         await runCommand(ws, 'git add -A && git -c user.email=harness@local -c user.name=harness commit -qm "mid-run workspace snapshot (pre-merge)"');
-        this.logMsg('Orkestrator', `📸 Zatečene nekomitovane izmene u glavnom folderu (${dirty.split('\n').length} fajlova) — snimljene pre merge-a.`);
+        this.logMsg(t('Orchestrator'), t('📸 Found uncommitted changes in the main folder ({n} files) — saved before the merge.', { n: dirty.split('\n').length }));
       }
       await runCommand(
         task.worktree,
-        `git add -A && git -c user.email=harness@local -c user.name="Agent Harness" commit -qm ${JSON.stringify(`task #${task.id}: ${task.title}`)} || true`
+        `git add -A && git -c user.email=harness@local -c user.name="Agentura" commit -qm ${JSON.stringify(`task #${task.id}: ${task.title}`)} || true`
       );
       const out = await runCommand(ws, `git merge --no-ff -m ${JSON.stringify(`merge task #${task.id}: ${task.title}`)} ${JSON.stringify(task.branch)}`);
       if (/CONFLICT|fatal:|exit code/i.test(out)) {
@@ -745,18 +749,18 @@ export class Orchestrator {
     if (this.config.prMode) {
       const pushed = await this.pushAndOpenPr(task);
       if (pushed) {
-        this.logMsg(byName, `🎉 Task #${task.id} ZAVRŠEN — grana push-ovana i PR otvoren`);
+        this.logMsg(byName, t('🎉 Task #{id} FINISHED — branch pushed and PR opened', { id: task.id }));
         this.updateTask(task, { status: 'done' });
         return;
       }
-      this.logMsg(byName, `⚠ Task #${task.id}: push/PR nije uspeo — radim lokalni merge umesto toga`);
+      this.logMsg(byName, t('⚠ Task #{id}: push/PR failed — doing a local merge instead', { id: task.id }));
     }
     const merge = await this.commitAndMerge(task);
     if (merge.ok) {
-      this.logMsg(byName, `🎉 Task #${task.id} PROŠAO — merge u ${this.mainBranch}, task ZAVRŠEN`);
+      this.logMsg(byName, t('🎉 Task #{id} PASSED — merged into {branch}, task FINISHED', { id: task.id, branch: this.mainBranch }));
       this.updateTask(task, { status: 'done' });
     } else {
-      this.logMsg(byName, `⚔ Task #${task.id}: merge u konfliktu — vraćam programeru na svežu bazu`);
+      this.logMsg(byName, t('⚔ Task #{id}: merge conflict — returning it to the programmer on a fresh base', { id: task.id }));
       this.updateTask(task, {
         status: 'needs_fix',
         feedbackSource: 'merge',
@@ -772,21 +776,21 @@ export class Orchestrator {
     this._gitLock = this._gitLock.then(async () => {
       await runCommand(
         task.worktree,
-        `git add -A && git -c user.email=harness@local -c user.name="Agent Harness" commit -qm ${JSON.stringify(`task #${task.id}: ${task.title}`)} || true`
+        `git add -A && git -c user.email=harness@local -c user.name="Agentura" commit -qm ${JSON.stringify(`task #${task.id}: ${task.title}`)} || true`
       );
       const push = await runCommand(task.worktree, `git push -u origin ${JSON.stringify(task.branch)}`);
       if (/fatal:|error:|exit code/i.test(push)) {
-        this.logMsg('Orkestrator', `git push: ${push.slice(0, 200)}`);
+        this.logMsg(t('Orchestrator'), `git push: ${push.slice(0, 200)}`);
         return false;
       }
-      const body = `Automatski PR iz Agent Harness-a.\n\nTask: ${task.title}\n\n${(task.lastSummary || '').slice(0, 1500)}`;
+      const body = t('Automatic PR from Agentura.\n\nTask: {title}\n\n{summary}', { title: task.title, summary: (task.lastSummary || '').slice(0, 1500) });
       const pr = await runCommand(
         task.worktree,
         `gh pr create --head ${JSON.stringify(task.branch)} --title ${JSON.stringify(`task #${task.id}: ${task.title}`)} --body ${JSON.stringify(body)} 2>&1`
       );
       const url = (pr.match(/https:\/\/\S+/) || [])[0];
-      if (url) this.logMsg('Orkestrator', `🔗 PR otvoren: ${url}`);
-      else this.logMsg('Orkestrator', `gh pr create: ${pr.slice(0, 200)}`);
+      if (url) this.logMsg(t('Orchestrator'), t('🔗 PR opened: {url}', { url }));
+      else this.logMsg(t('Orchestrator'), `gh pr create: ${pr.slice(0, 200)}`);
       await runCommand(this.config.workspacePath, `git worktree remove --force ${JSON.stringify(task.worktree)}; true`);
       task.worktree = null;
       return true;
@@ -797,18 +801,18 @@ export class Orchestrator {
   // User clicked "✓ Merge" on an awaiting_merge card
   async approveMerge(taskId) {
     const task = this.tasks.find((t) => t.id === taskId);
-    if (!task) throw new Error(`Task #${taskId} ne postoji`);
-    if (task.status !== 'awaiting_merge') throw new Error(`Task #${taskId} ne čeka merge (status: ${task.status})`);
-    await this.finalizeTask(task, 'Ti');
+    if (!task) throw new Error(t('Task #{id} does not exist', { id: taskId }));
+    if (task.status !== 'awaiting_merge') throw new Error(t('Task #{id} is not awaiting merge (status: {status})', { id: taskId, status: task.status }));
+    await this.finalizeTask(task, t('You'));
   }
 
   stop() {
     if (this.phase === 'running') {
       this.stopping = true;
-      this.logMsg('Orkestrator', 'Stop requested — workers will halt after current episodes.');
+      this.logMsg(t('Orchestrator'), t('Stop requested — workers will halt after current episodes.'));
     } else if (this.phase === 'planning' || this.phase === 'awaiting_approval') {
       this.stopping = true;
-      this.logMsg('Orkestrator', 'Planiranje otkazano.');
+      this.logMsg(t('Orchestrator'), t('Planning cancelled.'));
       this.setPhase('idle');
     }
   }
@@ -840,10 +844,10 @@ export class Orchestrator {
       const list = this._stuckPending.splice(0);
       if (!list.length) return;
       this.notify(
-        `⚠ Agent Harness: ${list.length} task(ova) ZAGLAVLJENO`,
-        `Run "${this.goal.slice(0, 120)}" ima novo-zaglavljene taskove:\n\n` +
-        list.map((t) => `#${t.id} ${t.title}\n  Razlog: ${t.feedback || '(bez detalja)'}`).join('\n\n') +
-        `\n\nRun nastavlja sa ostalim taskovima. Zaglavljene možeš da vratiš u rad dugmetom ↻ Retry u interfejsu.\n` +
+        t('⚠ Agentura: {n} task(s) STUCK', { n: list.length }),
+        t('Run "{goal}" has newly-stuck tasks:', { goal: this.goal.slice(0, 120) }) + '\n\n' +
+        list.map((s) => `#${s.id} ${s.title}\n` + t('  Reason: {reason}', { reason: s.feedback || t('(no details)') })).join('\n\n') +
+        '\n\n' + t('The run continues with the remaining tasks. You can put stuck tasks back to work with the ↻ Retry button in the UI.') + '\n' +
         `Workspace: ${this.config.workspacePath}`
       );
     }, 20_000);
@@ -892,8 +896,8 @@ export class Orchestrator {
         }
       }
       if (e.type === 'nudge') {
-        this.logMsg(agent.name, `⚠ Predao prazan rad (bez izmena fajlova) — podsetnik da implementira (pokušaj ${e.attempt}/2)`);
-        this.pushActivity(agent, { kind: 'note', text: `⚠ Prazan rad — podsetnik da implementira (pokušaj ${e.attempt}/2)` });
+        this.logMsg(agent.name, t('⚠ Submitted empty work (no file changes) — reminding it to implement (attempt {attempt}/2)', { attempt: e.attempt }));
+        this.pushActivity(agent, { kind: 'note', text: t('⚠ Empty work — reminder to implement (attempt {attempt}/2)', { attempt: e.attempt }) });
       }
       if (e.type === 'agent_text') {
         agent.lastText = e.text;
@@ -950,12 +954,12 @@ export class Orchestrator {
     while (!this.stopping && !this.allDone()) {
       if (await this.waitIfPaused()) continue;
       // A task whose dependency got stuck can never start — propagate.
-      for (const t of this.tasks) {
-        if (t.status === 'queued') {
-          const stuckDep = t.dependsOn.find((d) => this.tasks.find((x) => x.id === d)?.status === 'stuck');
+      for (const cand of this.tasks) {
+        if (cand.status === 'queued') {
+          const stuckDep = cand.dependsOn.find((d) => this.tasks.find((x) => x.id === d)?.status === 'stuck');
           if (stuckDep) {
-            this.logMsg('Orkestrator', `⚠ Task #${t.id} blokiran: zavisnost #${stuckDep} je zaglavljena`);
-            this.updateTask(t, { status: 'stuck', feedback: `Zavisnost (task #${stuckDep}) je zaglavljena — task ne može da počne. Odglavi task #${stuckDep} pa pokušaj ponovo ovaj.` });
+            this.logMsg(t('Orchestrator'), t('⚠ Task #{id} blocked: dependency #{dep} is stuck', { id: cand.id, dep: stuckDep }));
+            this.updateTask(cand, { status: 'stuck', feedback: t('Dependency (task #{dep}) is stuck — this task cannot start. Unstick task #{dep} and then retry this one.', { dep: stuckDep }) });
           }
         }
       }
@@ -973,7 +977,7 @@ export class Orchestrator {
       const fixing = task.status === 'needs_fix';
       this.updateTask(task, { status: 'coding', assignee: agent.name, assigneeId: agent.id });
       this.setAgent(agent, 'working', task.id);
-      this.logMsg(agent.name, fixing ? `▶ Popravlja task #${task.id} (${task.feedbackSource} feedback)` : `▶ Počinje task #${task.id}: ${task.title}`);
+      this.logMsg(agent.name, fixing ? t('▶ Fixing task #{id} ({source} feedback)', { id: task.id, source: task.feedbackSource }) : t('▶ Starting task #{id}: {title}', { id: task.id, title: task.title }));
 
       try {
         await this.ensureWorktree(task);
@@ -1000,7 +1004,7 @@ export class Orchestrator {
         const files = new Set([...result.changedFiles, ...gitFiles]);
         this.updateTask(task, { status: 'in_review', lastSummary: result.text, changedFiles: [...files], feedback: null });
         this.reviewQueue.push(task.id);
-        this.logMsg(agent.name, `✓ Task #${task.id} poslat na review (${files.size} fajlova izmenjeno)`);
+        this.logMsg(agent.name, t('✓ Task #{id} sent to review ({n} files changed)', { id: task.id, n: files.size }));
       } catch (err) {
         if (err.rateLimited) {
           // Remember the cut-off CLI session so the retry continues the same
@@ -1009,7 +1013,7 @@ export class Orchestrator {
           this.pauseForLimit(err.message);
           this.updateTask(task, { status: fixing ? 'needs_fix' : 'queued' });
         } else {
-          this.logMsg(agent.name, `✗ Greška na tasku #${task.id}: ${err.message}`);
+          this.logMsg(agent.name, t('✗ Error on task #{id}: {msg}', { id: task.id, msg: err.message }));
           this.updateTask(task, { status: 'stuck', feedback: err.message });
         }
       }
@@ -1029,7 +1033,7 @@ export class Orchestrator {
       const task = this.tasks.find((t) => t.id === taskId);
       task.reviewCycles += 1;
       this.setAgent(agent, 'working', task.id);
-      this.logMsg(agent.name, `🔍 Review #${task.reviewCycles} za task #${task.id}`);
+      this.logMsg(agent.name, t('🔍 Review #{cycle} for task #{id}', { cycle: task.reviewCycles, id: task.id }));
 
       const diff = await this.diffFor(task);
       // Episodes are stateless — hand the reviewer its own previous feedback
@@ -1052,14 +1056,14 @@ export class Orchestrator {
 
         task.errorCount = 0;
         if (approved) {
-          this.logMsg(agent.name, `✅ Task #${task.id} ODOBREN — ide u QA`);
+          this.logMsg(agent.name, t('✅ Task #{id} APPROVED — moving on to QA', { id: task.id }));
           this.updateTask(task, { status: 'in_qa' });
           this.qaQueue.push(task.id);
         } else if (task.reviewCycles >= MAX_REVIEW_CYCLES) {
-          this.logMsg(agent.name, `⚠ Task #${task.id} dostigao ${MAX_REVIEW_CYCLES} review ciklusa — označen kao STUCK`);
+          this.logMsg(agent.name, t('⚠ Task #{id} reached {n} review cycles — marked as STUCK', { id: task.id, n: MAX_REVIEW_CYCLES }));
           this.updateTask(task, { status: 'stuck', feedback: result.text, feedbackSource: 'reviewer' });
         } else {
-          this.logMsg(agent.name, `↩ Task #${task.id}: tražene izmene — vraćam programeru ${task.assignee}`);
+          this.logMsg(agent.name, t('↩ Task #{id}: changes requested — returning it to programmer {name}', { id: task.id, name: task.assignee }));
           this.updateTask(task, { status: 'needs_fix', feedback: result.text, feedbackSource: 'reviewer' });
         }
       } catch (err) {
@@ -1085,13 +1089,13 @@ export class Orchestrator {
     task.errorCount = (task.errorCount || 0) + 1;
     if (contextErr && !task.diffLimit) {
       task.diffLimit = 8000;
-      this.logMsg(agent.name, `✗ Task #${task.id}: kontekst prevelik — smanjujem diff na 8k i pokušavam ponovo`);
+      this.logMsg(agent.name, t('✗ Task #{id}: context too large — shrinking the diff to 8k and retrying', { id: task.id }));
       queue.push(task.id);
     } else if (contextErr || task.errorCount >= 3) {
-      this.logMsg(agent.name, `✗ Task #${task.id}: trajna greška (${task.errorCount}. pokušaj) — STUCK`);
-      this.updateTask(task, { status: 'stuck', feedback: `Epizoda nije mogla da se izvrši: ${err.message}` });
+      this.logMsg(agent.name, t('✗ Task #{id}: permanent error (attempt {n}) — STUCK', { id: task.id, n: task.errorCount }));
+      this.updateTask(task, { status: 'stuck', feedback: t('The episode could not be executed: {msg}', { msg: err.message }) });
     } else {
-      this.logMsg(agent.name, `✗ Greška za task #${task.id}: ${err.message} — vraćam u red (${task.errorCount}/3)`);
+      this.logMsg(agent.name, t('✗ Error for task #{id}: {msg} — requeueing ({n}/3)', { id: task.id, msg: err.message, n: task.errorCount }));
       queue.push(task.id);
     }
   }
@@ -1107,7 +1111,7 @@ export class Orchestrator {
       const task = this.tasks.find((t) => t.id === taskId);
       task.qaCycles += 1;
       this.setAgent(agent, 'working', task.id);
-      this.logMsg(agent.name, `🧪 QA #${task.qaCycles} za task #${task.id}`);
+      this.logMsg(agent.name, t('🧪 QA #{cycle} for task #{id}', { cycle: task.qaCycles, id: task.id }));
 
       const prevQa = [...task.history].reverse().find((h) => h.role === 'qa');
       const prevQaBlock = prevQa
@@ -1128,16 +1132,16 @@ export class Orchestrator {
         task.errorCount = 0;
         if (passed) {
           if (this.config.requireMergeApproval) {
-            this.logMsg(agent.name, `✋ Task #${task.id} prošao QA — čeka TVOJE odobrenje za merge (dugme na kartici)`);
+            this.logMsg(agent.name, t('✋ Task #{id} passed QA — awaiting YOUR merge approval (button on the card)', { id: task.id }));
             this.updateTask(task, { status: 'awaiting_merge' });
           } else {
             await this.finalizeTask(task, agent.name);
           }
         } else if (task.qaCycles >= MAX_REVIEW_CYCLES) {
-          this.logMsg(agent.name, `⚠ Task #${task.id} pao QA ${MAX_REVIEW_CYCLES} puta — STUCK`);
+          this.logMsg(agent.name, t('⚠ Task #{id} failed QA {n} times — STUCK', { id: task.id, n: MAX_REVIEW_CYCLES }));
           this.updateTask(task, { status: 'stuck', feedback: result.text, feedbackSource: 'qa' });
         } else {
-          this.logMsg(agent.name, `❌ Task #${task.id} pao QA — vraćam programeru na popravku`);
+          this.logMsg(agent.name, t('❌ Task #{id} failed QA — returning it to the programmer for fixes', { id: task.id }));
           this.updateTask(task, { status: 'needs_fix', feedback: result.text, feedbackSource: 'qa' });
         }
       } catch (err) {
@@ -1166,8 +1170,8 @@ export class Orchestrator {
         const id = Math.max(...this.tasks.map((t) => t.id)) + 1;
         this.tasks.push({
           id,
-          title: `Integracione popravke (runda ${this.integrationRounds})`,
-          description: `Završni integracioni QA celog projekta je pao. Popravi probleme iz izveštaja.\n\nOriginalni cilj:\n${this.goal}`,
+          title: t('Integration fixes (round {n})', { n: this.integrationRounds }),
+          description: t('The final integration QA of the whole project failed. Fix the problems from the report.\n\nOriginal goal:\n{goal}', { goal: this.goal }),
           size: 'M', dependsOn: [], status: 'needs_fix',
           assignee: null, assigneeId: null, pinnedTo: null,
           attempts: 0, reviewCycles: 0, qaCycles: 0,
@@ -1176,12 +1180,12 @@ export class Orchestrator {
           worktree: null, branch: null, history: [],
         });
         this.emit('task_update', { task: this.tasks[this.tasks.length - 1] });
-        this.logMsg('Orkestrator', `🔧 Integracioni QA pao — otvoren popravni task #${id}, tim nastavlja`);
+        this.logMsg(t('Orchestrator'), t('🔧 Integration QA failed — fix task #{id} opened, the team continues', { id }));
         this.resumeRun();
         return;
       }
       if (!verdict.passed) {
-        this.logMsg('Orkestrator', '⚠ Integracioni QA je PAO i posle svih popravnih rundi — run se završava NEPOTVRĐEN. Pogledaj izveštaj u logu/emailu.');
+        this.logMsg(t('Orchestrator'), t('⚠ Integration QA FAILED even after all fix rounds — the run ends UNVERIFIED. See the report in the log/email.'));
       }
     }
 
@@ -1192,23 +1196,25 @@ export class Orchestrator {
     const mins = ((this.finishedAt - this.startedAt) / 60000).toFixed(1);
     const u = this.totalUsage;
 
-    const summaryLines = this.tasks.map((t) =>
-      `#${t.id} [${t.status.toUpperCase()}] ${t.title} — ${t.assignee || '—'}, review ciklusa: ${t.reviewCycles}, QA: ${t.qaCycles}${t.usage.costUsd ? `, ~$${t.usage.costUsd.toFixed(2)}` : ''}`
+    const summaryLines = this.tasks.map((x) =>
+      t('#{id} [{status}] {title} — {assignee}, review cycles: {reviews}, QA: {qa}', {
+        id: x.id, status: x.status.toUpperCase(), title: x.title, assignee: x.assignee || '—', reviews: x.reviewCycles, qa: x.qaCycles,
+      }) + (x.usage.costUsd ? `, ~$${x.usage.costUsd.toFixed(2)}` : '')
     );
     const integLine =
-      this.integrationStatus === 'passed' ? '✅ Završni integracioni QA: PROŠAO\n' :
+      this.integrationStatus === 'passed' ? t('✅ Final integration QA: PASSED') + '\n' :
       this.integrationStatus === 'failed'
-        ? `⚠ Završni integracioni QA: PAO i posle popravnih rundi — projekat NIJE potvrđen!\nIzveštaj:\n${(this.integrationReport || '').slice(0, 3000)}\n`
+        ? t('⚠ Final integration QA: FAILED even after fix rounds — the project is NOT verified!\nReport:\n{report}', { report: (this.integrationReport || '').slice(0, 3000) }) + '\n'
         : '';
     const summary =
-      `Agent Harness — run završen za ${mins} min.\n` +
-      `Taskova završeno: ${done}/${this.tasks.length}${stuck.length ? `, zaglavljeno: ${stuck.length}` : ''}\n` +
+      t('Agentura — run finished in {mins} min.', { mins }) + '\n' +
+      t('Tasks completed: {done}/{total}', { done, total: this.tasks.length }) + (stuck.length ? t(', stuck: {n}', { n: stuck.length }) : '') + '\n' +
       integLine +
-      (u.calls ? `Potrošnja: ${fmtTok(u.input + u.cacheRead + u.cacheWrite)} in / ${fmtTok(u.output)} out (${u.calls} poziva), ~$${u.costUsd.toFixed(2)}\n` : '') +
+      (u.calls ? t('Usage: {in} in / {out} out ({calls} calls), ~${cost}', { in: fmtTok(u.input + u.cacheRead + u.cacheWrite), out: fmtTok(u.output), calls: u.calls, cost: u.costUsd.toFixed(2) }) + '\n' : '') +
       '\n' + summaryLines.join('\n') +
       `\n\nWorkspace: ${this.config.workspacePath}`;
 
-    this.logMsg('Orkestrator', this.stopping ? 'Run zaustavljen.' : `Svi taskovi obrađeni (${done}/${this.tasks.length} done)${u.costUsd ? ` — ukupno ~$${u.costUsd.toFixed(2)}` : ''}.`);
+    this.logMsg(t('Orchestrator'),this.stopping ? t('Run stopped.') : t('All tasks processed ({done}/{total} done)', { done, total: this.tasks.length }) + (u.costUsd ? t(' — total ~${cost}', { cost: u.costUsd.toFixed(2) }) : '') + '.');
     this.phase = 'finished';
     this.emit('run_finished', { summary, done, total: this.tasks.length, stuck: stuck.length, usage: u, state: this.state() });
 
@@ -1220,15 +1226,15 @@ export class Orchestrator {
         await sendEmail({
           to: this.config.notifyEmail,
           subject: this.integrationStatus === 'failed'
-            ? `⚠ Agent Harness: ${done}/${this.tasks.length} završeno, ali integracioni QA PAO`
+            ? t('⚠ Agentura: {done}/{total} completed, but integration QA FAILED', { done, total: this.tasks.length })
             : stuck.length
-            ? `⚠ Agent Harness: ${done}/${this.tasks.length} završeno, ${stuck.length} ZAGLAVLJENO`
-            : `✅ Agent Harness: ${done}/${this.tasks.length} taskova završeno`,
+            ? t('⚠ Agentura: {done}/{total} completed, {stuck} STUCK', { done, total: this.tasks.length, stuck: stuck.length })
+            : t('✅ Agentura: {done}/{total} tasks completed', { done, total: this.tasks.length }),
           text: summary,
         });
-        this.logMsg('Orkestrator', `📧 Email notifikacija poslata na ${this.config.notifyEmail}`);
+        this.logMsg(t('Orchestrator'), t('📧 Email notification sent to {to}', { to: this.config.notifyEmail }));
       } catch (err) {
-        this.logMsg('Orkestrator', `📧 Slanje emaila nije uspelo: ${err.message}`);
+        this.logMsg(t('Orchestrator'), t('📧 Sending the email failed: {msg}', { msg: err.message }));
       }
     }
   }
@@ -1236,7 +1242,7 @@ export class Orchestrator {
   async runIntegrationQa() {
     const agent = this.agents.find((a) => a.role === 'qa') || this.agents[0];
     this.setAgent(agent, 'working', null);
-    this.logMsg(agent.name, '🧪 ZAVRŠNI integracioni QA — proveravam da li ceo projekat radi kao celina…');
+    this.logMsg(agent.name, t('🧪 FINAL integration QA — checking whether the whole project works together…'));
     try {
       const taskList = this.tasks
         .map((t) => `#${t.id} [${t.status}] ${t.title}`)
@@ -1254,17 +1260,17 @@ export class Orchestrator {
         '\n\nVerify the whole project now. Remember to end with the VERDICT line.' +
         (await this.notesBlock());
       const result = await this.episode({
-        agent, role: 'qa', task: { id: 0, title: `Integracija: ${this.goal.slice(0, 60)}` }, attempt: this.integrationRounds,
+        agent, role: 'qa', task: { id: 0, title: t('Integration: {goal}', { goal: this.goal.slice(0, 60) }) }, attempt: this.integrationRounds,
         system: integrationQaPrompt(agent.name, HARNESS_DIR), userMessage,
         workspace: this.config.workspacePath,
       });
       const passed = lastVerdict(result.text) === 'PASSED';
-      this.logMsg(agent.name, passed ? '✅ Integracioni QA PROŠAO — projekat radi kao celina' : '❌ Integracioni QA PAO — otvaram popravni task');
+      this.logMsg(agent.name, passed ? t('✅ Integration QA PASSED — the project works as a whole') : t('❌ Integration QA FAILED — opening a fix task'));
       this.setAgent(agent, 'idle');
       return { passed, report: result.text };
     } catch (err) {
       this.setAgent(agent, 'idle');
-      this.logMsg(agent.name, `⚠ Integracioni QA nije mogao da se izvrši (${err.message}) — preskačem`);
+      this.logMsg(agent.name, t('⚠ Integration QA could not be executed ({msg}) — skipping', { msg: err.message }));
       return { passed: true, report: '' };
     }
   }
@@ -1315,10 +1321,10 @@ export class Orchestrator {
   // Rebuild a run from a snapshot after a server restart and start workers.
   async restore(snap, apiKey, kimiKey = '') {
     if (this.phase === 'running' || this.phase === 'planning') {
-      throw new Error('Ova sesija je zauzeta — otvori novi tab pa nastavi run u njemu');
+      throw new Error(t('This session is busy — open a new tab and resume the run there'));
     }
     try { await fs.access(snap.config.workspacePath); } catch {
-      throw new Error(`Workspace više ne postoji: ${snap.config.workspacePath}`);
+      throw new Error(t('The workspace no longer exists: {ws}', { ws: snap.config.workspacePath }));
     }
 
     this.reset();
@@ -1337,15 +1343,15 @@ export class Orchestrator {
     }));
     this.tasks = snap.tasks || [];
 
-    for (const t of this.tasks) {
-      t.errorCount = 0;
+    for (const task of this.tasks) {
+      task.errorCount = 0;
       // A worktree lost with the crash → the task restarts on a fresh base.
-      if (t.worktree) {
-        try { await fs.access(t.worktree); } catch {
-          this.logMsg('Orkestrator', `⚠ Task #${t.id}: radna kopija je nestala u prekidu — task kreće ispočetka`);
-          t.worktree = null; t.branch = null; t.changedFiles = [];
-          if (!['done', 'stuck'].includes(t.status)) {
-            t.status = 'queued'; t.feedback = null; t.assignee = null; t.assigneeId = null;
+      if (task.worktree) {
+        try { await fs.access(task.worktree); } catch {
+          this.logMsg(t('Orchestrator'), t('⚠ Task #{id}: the working copy vanished in the interruption — the task starts over', { id: task.id }));
+          task.worktree = null; task.branch = null; task.changedFiles = [];
+          if (!['done', 'stuck'].includes(task.status)) {
+            task.status = 'queued'; task.feedback = null; task.assignee = null; task.assigneeId = null;
           }
           continue;
         }
@@ -1353,19 +1359,19 @@ export class Orchestrator {
       // Mid-flight statuses → back to an actionable state / queue. A queued
       // task must be unclaimed (assigneeId blocks claimableBy) — fixes keep
       // their owner so the same programmer (same id after restore) continues.
-      if (t.status === 'coding') {
-        t.status = t.feedback ? 'needs_fix' : 'queued';
-        if (t.status === 'queued') { t.assignee = null; t.assigneeId = null; }
-      } else if (t.status === 'queued') {
-        t.assignee = null; t.assigneeId = null;
-      } else if (t.status === 'in_review') this.reviewQueue.push(t.id);
-      else if (t.status === 'in_qa') this.qaQueue.push(t.id);
+      if (task.status === 'coding') {
+        task.status = task.feedback ? 'needs_fix' : 'queued';
+        if (task.status === 'queued') { task.assignee = null; task.assigneeId = null; }
+      } else if (task.status === 'queued') {
+        task.assignee = null; task.assigneeId = null;
+      } else if (task.status === 'in_review') this.reviewQueue.push(task.id);
+      else if (task.status === 'in_qa') this.qaQueue.push(task.id);
     }
 
     this.phase = 'running';
     this.emit('run_started', { state: this.state() });
     const open = this.tasks.filter((t) => !['done', 'stuck'].includes(t.status)).length;
-    this.logMsg('Orkestrator', `⏯ Run obnovljen iz snimka (${snap.runId}) — ${open} taskova za dovršavanje. Radne kopije i Claude Code sesije su sačuvane.`);
+    this.logMsg(t('Orchestrator'), t('⏯ Run restored from a snapshot ({runId}) — {n} tasks left to finish. Working copies and Claude Code sessions are preserved.', { runId: snap.runId, n: open }));
     this.startWorkers();
     this.scheduleSnapshot();
   }
@@ -1389,9 +1395,9 @@ export class Orchestrator {
         log: this.log,
       };
       await fs.writeFile(path.join(RUNS_DIR, `${this.runId}.json`), JSON.stringify(record, null, 1));
-      this.logMsg('Orkestrator', `💾 Run sačuvan u istoriju (${this.runId})`);
+      this.logMsg(t('Orchestrator'), t('💾 Run saved to history ({runId})', { runId: this.runId }));
     } catch (err) {
-      this.logMsg('Orkestrator', `💾 Snimanje istorije nije uspelo: ${err.message}`);
+      this.logMsg(t('Orchestrator'), t('💾 Saving history failed: {msg}', { msg: err.message }));
     }
   }
 }

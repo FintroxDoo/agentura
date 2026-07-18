@@ -5,6 +5,7 @@
 // Uses --output-format stream-json so tool calls and interim text are
 // surfaced live in the harness log, same as the raw-API engine.
 import { spawn, execFile } from 'node:child_process';
+import { t } from './i18n.js';
 
 // A hard wall-clock kill murders perfectly healthy long episodes (deep mobile
 // E2E with simulator + Maestro legitimately runs 30+ min). Instead: kill only
@@ -62,13 +63,13 @@ function runCliStream(args, cwd, onEvent) {
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
         child.kill('SIGKILL');
-        reject(new Error(`Claude Code CLI: bez ikakvog izlaza ${EPISODE_IDLE_MS / 60000} min — epizoda zaglavljena, prekinuta`));
+        reject(new Error(t('Claude Code CLI: no output at all for {mins} min — episode stuck, terminated', { mins: EPISODE_IDLE_MS / 60000 })));
       }, EPISODE_IDLE_MS);
     };
     bumpIdle();
     const hardTimer = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error(`Claude Code CLI: prekoračen apsolutni limit epizode (${EPISODE_HARD_CAP_MS / 60000} min)`));
+      reject(new Error(t('Claude Code CLI: absolute episode limit exceeded ({mins} min)', { mins: EPISODE_HARD_CAP_MS / 60000 })));
     }, EPISODE_HARD_CAP_MS);
     const clearTimers = () => { clearTimeout(idleTimer); clearTimeout(hardTimer); };
 
@@ -108,7 +109,7 @@ function runCliStream(args, cwd, onEvent) {
     child.on('error', (err) => { clearTimers(); reject(err); });
     child.on('close', (code) => {
       clearTimers();
-      if (!result) reject(new Error(`Claude Code CLI (exit ${code}): ${stderr.slice(0, 300) || 'nije vratio rezultat'}`));
+      if (!result) reject(new Error(`Claude Code CLI (exit ${code}): ${stderr.slice(0, 300) || t('did not return a result')}`));
       else resolve(result);
     });
   });
@@ -146,7 +147,7 @@ export async function runClaudeCodeEpisode({ model, system, userMessage, workspa
       j = await runCliStream(args, workspace, onEvent);
     } catch (err) {
       if (sessionId && sessionId === resumeSessionId) {
-        onEvent({ type: 'agent_text', text: '(nastavak prekinute sesije nije uspeo — krećem novu epizodu od početka)' });
+        onEvent({ type: 'agent_text', text: t('(resuming the interrupted session failed — starting a new episode from scratch)') });
         sessionId = null;
         prompt = userMessage;
         attempt -= 1;
@@ -156,7 +157,7 @@ export async function runClaudeCodeEpisode({ model, system, userMessage, workspa
     }
     if ((j.is_error || (j.subtype && j.subtype !== 'success')) && sessionId === resumeSessionId &&
         /no conversation|not found|unknown session|no session/i.test(String(j.result || ''))) {
-      onEvent({ type: 'agent_text', text: '(prekinuta sesija više ne postoji — krećem novu epizodu od početka)' });
+      onEvent({ type: 'agent_text', text: t('(the interrupted session no longer exists — starting a new episode from scratch)') });
       sessionId = null;
       prompt = userMessage;
       attempt -= 1;
@@ -179,19 +180,17 @@ export async function runClaudeCodeEpisode({ model, system, userMessage, workspa
     const failed = j.is_error || (j.subtype && j.subtype !== 'success');
     if (failed) {
       if (/rate.?limit|usage limit|session limit|hit your.*limit|limit (reached|will reset)|resets \d|out of extended usage/i.test(resultText)) {
-        const err = new Error(`Claude Code: dostignut limit plana — ${resultText.slice(0, 200)}`);
+        const err = new Error(t('Claude Code: plan limit reached — {msg}', { msg: resultText.slice(0, 200) }));
         err.rateLimited = true;
         err.cliSessionId = sessionId; // caller can --resume this exact conversation later
         throw err;
       }
       if (/401|invalid authentication|failed to authenticate|authentication_error|oauth token.*(expired|revoked)/i.test(resultText)) {
         throw new Error(
-          'Claude Code CLI ne može da se autentifikuje (401). Rešenje: u svom terminalu pokreni `claude setup-token`, ' +
-          'potvrdi u browseru, pa dobijeni token upiši u agent-harness/.env kao CLAUDE_CODE_OAUTH_TOKEN=... i restartuj server. ' +
-          '(Alternativa: `claude` pa /login da osvežiš prijavu.)'
+          t('Claude Code CLI cannot authenticate (401). Fix: run `claude setup-token` in your terminal, confirm in the browser, then put the resulting token into agent-harness/.env as CLAUDE_CODE_OAUTH_TOKEN=... and restart the server. (Alternative: run `claude` then /login to refresh the login.)')
         );
       }
-      throw new Error(`Claude Code epizoda nije uspela (${j.subtype || 'error'}): ${resultText.slice(0, 300)}`);
+      throw new Error(t('Claude Code episode failed ({subtype}): {msg}', { subtype: j.subtype || 'error', msg: resultText.slice(0, 300) }));
     }
     onEvent({ type: 'agent_text', text });
 

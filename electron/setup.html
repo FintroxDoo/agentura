@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="sr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Harness — Podešavanje ključeva</title>
+<title>Agentura — Key setup</title>
 <style>
   :root{
     --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --border:#2a2f3f;
@@ -42,37 +42,37 @@
 <body>
 <div class="card">
   <div class="head">
-    <div class="logo">AH</div>
+    <div class="logo">AG</div>
     <div>
-      <h1>Dobrodošli u Agent Harness</h1>
-      <div class="sub">Unesi API ključeve pre pokretanja tima</div>
+      <h1>Welcome to Agentura</h1>
+      <div class="sub">Enter your API keys before starting the team</div>
     </div>
   </div>
 
   <p class="intro">
-    Harness koristi ove ključeve da bi agenti (programeri, team lead, QA) mogli da
-    pozivaju modele. Dovoljno je uneti bar jedan — možeš uneti i oba i mešati motore po ulozi.
+    Agentura uses these keys so the agents (programmers, team lead, QA) can
+    call the models. Entering at least one is enough — you can also enter both and mix engines per role.
   </p>
 
   <label for="anthropicKey">Claude API key (ANTHROPIC_API_KEY)</label>
   <input type="password" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
   <div class="hint">
-    Ključ dobijaš na <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
-    → sekcija <b>API keys</b> → „Create Key". Troši Anthropic kredite (pay-per-token).
+    Get your key at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
+    → <b>API keys</b> section → "Create Key". Uses Anthropic credits (pay-per-token).
   </div>
 
   <label for="kimiKey">Kimi API key (KIMI_API_KEY)</label>
   <input type="password" id="kimiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
   <div class="hint">
-    Ključ dobijaš na <a href="https://platform.moonshot.ai" target="_blank" rel="noopener">platform.moonshot.ai</a>
-    (Moonshot / Kimi) uz <b>Kimi For Coding</b> pretplatu.
+    Get your key at <a href="https://platform.moonshot.ai" target="_blank" rel="noopener">platform.moonshot.ai</a>
+    (Moonshot / Kimi) with a <b>Kimi For Coding</b> subscription.
   </div>
 
-  <button class="primary" id="continueBtn" disabled>Nastavi</button>
+  <button class="primary" id="continueBtn" disabled>Continue</button>
 
-  <div class="status" id="status"><span class="spinner"></span><span>Restartujem server…</span></div>
+  <div class="status" id="status"><span class="spinner"></span><span>Restarting the server…</span></div>
 
-  <div class="note">Ključevi se čuvaju lokalno na tvom računaru i koriste se samo za pozive modelima.</div>
+  <div class="note">The keys are stored locally on your computer and are used only for model calls.</div>
 </div>
 
 <script>
@@ -81,14 +81,14 @@
   const continueBtn = document.getElementById('continueBtn');
   const status = document.getElementById('status');
 
-  // Dugme je omogućeno čim je bar jedno polje popunjeno (jedno je dovoljno, oba dozvoljena).
+  // The button is enabled as soon as at least one field is filled (one is enough, both allowed).
   function refreshBtn() {
     continueBtn.disabled = !(anthropicKey.value.trim() || kimiKey.value.trim());
   }
   anthropicKey.addEventListener('input', refreshBtn);
   kimiKey.addEventListener('input', refreshBtn);
 
-  // Prefill ranije sačuvanim vrednostima (ako smo pod Electronom).
+  // Prefill with previously saved values (when running under Electron).
   async function prefill() {
     if (!window.harness || !window.harness.getKeys) return;
     try {
@@ -98,7 +98,7 @@
         kimiKey.value = keys.kimiKey || '';
       }
     } catch (e) {
-      console.error('getKeys nije uspeo:', e);
+      console.error('getKeys failed:', e);
     }
     refreshBtn();
   }
@@ -114,9 +114,9 @@
           kimiKey: kimiKey.value.trim(),
         });
       }
-      // Main proces sam restartuje server i prebacuje prozor na glavni UI.
+      // The main process restarts the server itself and switches the window to the main UI.
     } catch (e) {
-      console.error('saveKeys nije uspeo:', e);
+      console.error('saveKeys failed:', e);
       status.classList.remove('show');
       continueBtn.disabled = false;
     }

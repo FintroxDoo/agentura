@@ -6,15 +6,17 @@
 // NOTE on "from": without a verified domain on Resend, you must send from
 // onboarding@resend.dev and Resend only delivers to the email address of
 // the Resend account owner. Verify your domain in Resend to send to anyone
-// and set RESEND_FROM (e.g. "Agent Harness <noreply@tvojdomen.rs>").
+// and set RESEND_FROM (e.g. "Agentura <noreply@tvojdomen.rs>").
+
+import { t } from './i18n.js';
 
 const API_URL = 'https://api.resend.com/emails';
 
 export async function sendEmail({ to, subject, text }) {
-  if (!to) throw new Error('Nije unet email primaoca');
+  if (!to) throw new Error(t('No recipient email address provided'));
   const apiKey = (process.env.RESEND_API_KEY || '').trim();
-  if (!apiKey) throw new Error('RESEND_API_KEY nije postavljen u .env — email se ne može poslati');
-  const from = process.env.RESEND_FROM || 'Agent Harness <onboarding@resend.dev>';
+  if (!apiKey) throw new Error(t('RESEND_API_KEY is not set in .env — the email cannot be sent'));
+  const from = process.env.RESEND_FROM || 'Agentura <onboarding@resend.dev>';
 
   const res = await fetch(API_URL, {
     method: 'POST',

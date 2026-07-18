@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="sr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Harness — AI Dev Tim</title>
+<title>Agentura — AI Dev Team</title>
 <style>
   :root{
     --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --border:#2a2f3f;
@@ -158,13 +158,17 @@
 </head>
 <body>
 <header>
-  <div class="logo">AH</div>
+  <div class="logo">AG</div>
   <div>
-    <h1>Agent Harness</h1>
-    <div class="sub">AI dev tim — team lead plan · odobrenje · paralelni programeri · review · QA</div>
+    <h1>Agentura</h1>
+    <div class="sub" data-i18n>AI dev team — team lead plan · approval · parallel programmers · review · QA</div>
   </div>
-  <div class="statusline" id="statusline"><span id="cost" style="color:var(--ok);font-weight:600"></span><span class="dot"></span><span id="statustext">neaktivan</span></div>
-  <button class="ghost" id="keysSettingsBtn" title="Podešavanja API ključeva" style="display:none;flex:none">🔑 Podešavanja ključeva</button>
+  <div class="statusline" id="statusline"><span id="cost" style="color:var(--ok);font-weight:600"></span><span class="dot"></span><span id="statustext">idle</span></div>
+  <select id="langSel" title="Language" style="flex:none;width:auto;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);padding:6px 8px;font-size:.8rem;cursor:pointer">
+    <option value="en">🌐 EN</option>
+    <option value="sr">🌐 SR</option>
+  </select>
+  <button class="ghost" id="keysSettingsBtn" data-i18n-title title="API key settings" style="display:none;flex:none" data-i18n>🔑 Key settings</button>
 </header>
 
 <div class="tabs" id="tabs"></div>
@@ -172,50 +176,50 @@
 <main>
   <!-- ===================== CONFIG ===================== -->
   <section class="panel" id="configPanel">
-    <!-- Projekat: sesija je trajno vezana za folder; fajl stablo ispod -->
+    <!-- Project: the session is permanently bound to a folder; file tree below -->
     <div id="projPanel" style="margin-bottom:14px">
-      <h2 style="display:flex;align-items:center;gap:8px">📁 Projekat
-        <button class="ghost" id="projRefresh" title="Osveži stablo" style="margin-left:auto;padding:3px 9px;display:none">↻</button>
+      <h2 style="display:flex;align-items:center;gap:8px"><span data-i18n>📁 Project</span>
+        <button class="ghost" id="projRefresh" data-i18n-title title="Refresh tree" style="margin-left:auto;padding:3px 9px;display:none">↻</button>
       </h2>
-      <div class="hint" id="projPath" style="word-break:break-all">(sesija još nije vezana za folder)</div>
-      <button class="ghost" id="projBind" style="width:100%;margin-top:8px">📁 Izaberi folder projekta</button>
+      <div class="hint" id="projPath" style="word-break:break-all">(session not yet bound to a folder)</div>
+      <button class="ghost" id="projBind" style="width:100%;margin-top:8px" data-i18n>📁 Choose project folder</button>
       <div id="fileTree" class="ftree" style="display:none"></div>
     </div>
 
-    <h2>Podešavanje tima</h2>
+    <h2 data-i18n>Team setup</h2>
     <div class="counts">
-      <div><label>Programeri</label><div class="stepper"><button data-t="programmers" data-d="-1">−</button><input id="programmers" value="2"><button data-t="programmers" data-d="1">+</button></div></div>
+      <div><label data-i18n>Programmers</label><div class="stepper"><button data-t="programmers" data-d="-1">−</button><input id="programmers" value="2"><button data-t="programmers" data-d="1">+</button></div></div>
       <div><label>Team Lead</label><div class="stepper"><button data-t="reviewers" data-d="-1">−</button><input id="reviewers" value="1"><button data-t="reviewers" data-d="1">+</button></div></div>
       <div><label>QA</label><div class="stepper"><button data-t="qa" data-d="-1">−</button><input id="qa" value="1"><button data-t="qa" data-d="1">+</button></div></div>
     </div>
 
-    <label>Zadatak za tim <span style="color:#525a70">(cilj — team lead ga razbija na taskove)</span></label>
-    <textarea id="goal" placeholder="npr:
-Napravi TODO web aplikaciju: Node backend sa REST API-jem,
-frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
+    <label><span data-i18n>Task for the team</span> <span style="color:#525a70" data-i18n>(goal — the team lead breaks it into tasks)</span></label>
+    <textarea id="goal" data-i18n-ph placeholder="e.g.:
+Build a TODO web app: Node backend with a REST API,
+frontend in plain HTML/JS, storage in a JSON file, tests."></textarea>
 
-    <!-- Radni prostor: vidljiv samo dok sesija NIJE vezana za folder -->
+    <!-- Workspace: visible only while the session is NOT bound to a folder -->
     <div id="wsSection">
-    <label>Radni prostor</label>
+    <label data-i18n>Workspace</label>
     <div class="radio-group">
-      <label><input type="radio" name="wsmode" value="new" checked>Novi projekat</label>
-      <label><input type="radio" name="wsmode" value="existing">Postojeći folder</label>
+      <label><input type="radio" name="wsmode" value="new" checked><span data-i18n>New project</span></label>
+      <label><input type="radio" name="wsmode" value="existing"><span data-i18n>Existing folder</span></label>
       <label><input type="radio" name="wsmode" value="git">Git URL</label>
     </div>
     <div id="wsNewWrap">
-      <label>Lokacija novog projekta</label>
-      <div class="pathbox"><div class="path" id="wsNewLoc">…</div><button class="ghost" id="wsNewBrowse">📁 Izaberi</button></div>
-      <label>Ime projekta</label>
-      <input type="text" id="wsNewName" value="novi-projekat">
+      <label data-i18n>New project location</label>
+      <div class="pathbox"><div class="path" id="wsNewLoc">…</div><button class="ghost" id="wsNewBrowse" data-i18n>📁 Browse</button></div>
+      <label data-i18n>Project name</label>
+      <input type="text" id="wsNewName" value="new-project">
     </div>
     <div id="wsExistWrap" style="display:none">
-      <label>Folder projekta</label>
-      <div class="pathbox"><div class="path" id="wsExistLoc">(nije izabran)</div><button class="ghost" id="wsExistBrowse">📁 Izaberi</button></div>
+      <label data-i18n>Project folder</label>
+      <div class="pathbox"><div class="path" id="wsExistLoc">(not selected)</div><button class="ghost" id="wsExistBrowse" data-i18n>📁 Browse</button></div>
     </div>
-    <div id="wsGitWrap" style="display:none"><label>Git clone URL</label><input type="text" id="wsGit" placeholder="https://github.com/korisnik/repo.git"></div>
+    <div id="wsGitWrap" style="display:none"><label>Git clone URL</label><input type="text" id="wsGit" placeholder="https://github.com/user/repo.git"></div>
     </div>
 
-    <label>Motor <span style="color:#525a70">(brzi izbor za sve — ispod možeš da mešaš po ulozi)</span></label>
+    <label><span data-i18n>Engine</span> <span style="color:#525a70" data-i18n>(quick pick for all — mix per role below)</span></label>
     <div class="radio-group">
       <label><input type="radio" name="engine" value="api" checked>⚡ Claude API</label>
       <label id="engineCCLabel"><input type="radio" name="engine" value="claude-code">💳 Claude Code</label>
@@ -223,62 +227,62 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
     </div>
     <div class="hint" id="engineHint"></div>
 
-    <label>Motor + model po ulozi <span style="color:#525a70">(mogu da se mešaju, npr. Claude lead + Kimi programeri)</span></label>
-    <label style="margin-top:6px">Programeri</label>
+    <label><span data-i18n>Engine + model per role</span> <span style="color:#525a70" data-i18n>(mixable, e.g. Claude lead + Kimi programmers)</span></label>
+    <label style="margin-top:6px" data-i18n>Programmers</label>
     <div class="row">
       <select id="engProgrammer" class="engsel" style="flex:0 0 138px"></select>
-      <select id="modelProgrammer"><option>učitavam…</option></select>
+      <select id="modelProgrammer"><option data-i18n>loading…</option></select>
     </div>
     <label>Team Lead (plan + review)</label>
     <div class="row">
       <select id="engReviewer" class="engsel" style="flex:0 0 138px"></select>
-      <select id="modelReviewer"><option>učitavam…</option></select>
+      <select id="modelReviewer"><option data-i18n>loading…</option></select>
     </div>
     <label>QA</label>
     <div class="row">
       <select id="engQa" class="engsel" style="flex:0 0 138px"></select>
-      <select id="modelQa"><option>učitavam…</option></select>
+      <select id="modelQa"><option data-i18n>loading…</option></select>
     </div>
-    <div class="mockbadge" id="mockBadge">⚠ MOCK mod — ANTHROPIC_API_KEY nije postavljen u .env na serveru. Tim se simulira bez pravih poziva.</div>
+    <div class="mockbadge" id="mockBadge" data-i18n>⚠ MOCK mode — ANTHROPIC_API_KEY is not set in .env on the server. The team is simulated without real calls.</div>
 
     <details>
-      <summary>⚙ Napredno</summary>
-      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="optFinalQa" checked style="width:auto">Završni integracioni QA celog projekta</label>
-      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optMergeApproval" style="width:auto">Traži moje odobrenje pre merge-a</label>
-      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optPrMode" style="width:auto">PR režim (git push + gh pr create)</label>
-      <div class="hint">PR režim zahteva git remote i gh CLI; taskovi se ne merge-uju lokalno pa se integracioni QA preskače.</div>
+      <summary data-i18n>⚙ Advanced</summary>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="optFinalQa" checked style="width:auto"><span data-i18n>Final integration QA of the whole project</span></label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optMergeApproval" style="width:auto"><span data-i18n>Ask for my approval before merge</span></label>
+      <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optPrMode" style="width:auto"><span data-i18n>PR mode (git push + gh pr create)</span></label>
+      <div class="hint" data-i18n>PR mode requires a git remote and the gh CLI; tasks are not merged locally so integration QA is skipped.</div>
     </details>
 
     <details>
-      <summary>Email notifikacija (Resend)</summary>
-      <label>Pošalji na</label>
+      <summary data-i18n>Email notification (Resend)</summary>
+      <label data-i18n>Send to</label>
       <input type="email" id="notifyEmail" placeholder="stefan@fintrox.rs">
-      <button class="ghost" id="testEmail" style="margin-top:8px">Pošalji test email</button>
-      <div class="hint">Slanje ide preko Resend API-ja (ključ je na serveru). Napomena: dok ne verifikuješ svoj domen na resend.com, Resend šalje samo na email vlasnika Resend naloga, sa adrese onboarding@resend.dev.</div>
+      <button class="ghost" id="testEmail" style="margin-top:8px" data-i18n>Send test email</button>
+      <div class="hint" data-i18n>Sending goes through the Resend API (the key lives on the server). Note: until you verify your own domain on resend.com, Resend only delivers to the Resend account owner's email, from onboarding@resend.dev.</div>
     </details>
 
-    <button class="primary" id="planBtn">🧠 Team lead: napravi plan</button>
-    <button class="ghost" id="askBtn" style="width:100%;margin-top:8px">❓ Pitaj team lead-a (odgovor, bez taskova)</button>
-    <div class="hint">Isti input gore: „napravi plan" deli posao timu, a „pitaj" samo odgovara (kako se nešto koristi, gde je šta…) — čita kod po potrebi, ništa ne menja.</div>
+    <button class="primary" id="planBtn" data-i18n>🧠 Team lead: create a plan</button>
+    <button class="ghost" id="askBtn" style="width:100%;margin-top:8px" data-i18n>❓ Ask the team lead (answer, no tasks)</button>
+    <div class="hint" data-i18n>Same input above: "create a plan" splits the work across the team, while "ask" only answers (how something is used, where things are…) — reads code as needed, changes nothing.</div>
 
     <details style="margin-top:10px">
-      <summary>⚡ Solo agent (bez plana)</summary>
-      <label>Uloga</label>
+      <summary data-i18n>⚡ Solo agent (no plan)</summary>
+      <label data-i18n>Role</label>
       <select id="soloRole">
-        <option value="programmer">👨‍💻 Programer — implementira zadatak</option>
-        <option value="reviewer">🔍 Team lead — code review / analiza</option>
-        <option value="ask">❓ Team lead — odgovor na pitanje</option>
-        <option value="qa">🧪 QA — testira projekat</option>
+        <option value="programmer" data-i18n>👨‍💻 Programmer — implements the task</option>
+        <option value="reviewer" data-i18n>🔍 Team lead — code review / analysis</option>
+        <option value="ask" data-i18n>❓ Team lead — answers a question</option>
+        <option value="qa" data-i18n>🧪 QA — tests the project</option>
       </select>
-      <div class="hint">Jedan agent, jedna epizoda — bez plana i review lanca. Koristi cilj/opis, radni prostor, motor i model te uloge iz podešavanja iznad. Programer radi direktno na main grani (izmene se komituju), team lead i QA daju izveštaj (+ email ako je unet).</div>
-      <button class="ghost" id="soloBtn" style="width:100%;margin-top:8px">▶ Pokreni solo agenta</button>
+      <div class="hint" data-i18n>One agent, one episode — no plan or review chain. Uses the goal/description, workspace, engine and model of that role from the settings above. The programmer works directly on the main branch (changes are committed); the team lead and QA produce a report (+ email if provided).</div>
+      <button class="ghost" id="soloBtn" style="width:100%;margin-top:8px" data-i18n>▶ Run solo agent</button>
     </details>
 
-    <button class="ghost danger" id="stopBtn" style="width:100%;margin-top:8px;display:none">■ Zaustavi</button>
+    <button class="ghost danger" id="stopBtn" style="width:100%;margin-top:8px;display:none" data-i18n>■ Stop</button>
 
     <details style="margin-top:14px">
-      <summary>📜 Istorija runova</summary>
-      <div id="runsList" class="hint" style="margin-top:8px">(nema sačuvanih runova)</div>
+      <summary data-i18n>📜 Run history</summary>
+      <div id="runsList" class="hint" style="margin-top:8px">(no saved runs)</div>
     </details>
   </section>
 
@@ -289,48 +293,48 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
     <!-- Rate-limit pause: countdown + immediate resume -->
     <div class="banner" id="pauseBar" style="background:rgba(255,196,0,.1);border-color:rgba(255,196,0,.45);color:var(--warn)">
       <span id="pauseText"></span>
-      <button class="ghost" id="resumePauseBtn" style="margin-left:12px">▶ Nastavi odmah</button>
-      <div class="hint" style="font-weight:400;margin-top:6px">Ako si dopunio limit/tokene, ne moraš da čekaš — klikni Nastavi odmah. Prekinute epizode nastavljaju isti razgovor (--resume), ne kreću od nule.</div>
+      <button class="ghost" id="resumePauseBtn" style="margin-left:12px" data-i18n>▶ Resume now</button>
+      <div class="hint" style="font-weight:400;margin-top:6px" data-i18n>If you topped up your limit/tokens you don't have to wait — click Resume now. Interrupted episodes continue the same conversation (--resume), they don't start from scratch.</div>
     </div>
 
     <!-- Interrupted runs found on disk after a server restart -->
     <div class="banner" id="resumeBar" style="background:rgba(96,165,250,.1);border-color:rgba(96,165,250,.45);color:var(--text)">
-      <div style="margin-bottom:6px">⏯ Pronađen prekinut run (server je bio ugašen usred rada):</div>
+      <div style="margin-bottom:6px" data-i18n>⏯ Found an interrupted run (the server was shut down mid-work):</div>
       <div id="resumeList"></div>
     </div>
 
-    <button class="ghost" id="openWs" style="display:none">📂 Otvori projekat</button>
+    <button class="ghost" id="openWs" style="display:none" data-i18n>📂 Open project</button>
 
     <!-- Plan approval -->
     <div class="panel" id="planPanel" style="display:none">
-      <h2>📋 Predlog plana — čeka tvoje odobrenje</h2>
+      <h2 data-i18n>📋 Plan proposal — awaiting your approval</h2>
       <div class="hint" id="planGoal"></div>
       <div class="hint" id="planEstimate" style="color:var(--warn)"></div>
       <div id="planList" style="margin-top:10px"></div>
-      <button class="ghost" id="planAdd">+ Dodaj task</button>
-      <button class="primary" id="approveBtn">✓ Odobri plan i pokreni tim</button>
-      <label>Primedbe (za novi plan)</label>
-      <textarea id="planFeedback" rows="2" style="min-height:0" placeholder="npr: spoji taskove 2 i 3, dodaj poseban task za testove…"></textarea>
-      <button class="ghost" id="replanBtn" style="width:100%;margin-top:8px">↺ Ponovi planiranje uz primedbe</button>
+      <button class="ghost" id="planAdd" data-i18n>+ Add task</button>
+      <button class="primary" id="approveBtn" data-i18n>✓ Approve plan and start the team</button>
+      <label data-i18n>Feedback (for a new plan)</label>
+      <textarea id="planFeedback" rows="2" style="min-height:0" data-i18n-ph placeholder="e.g.: merge tasks 2 and 3, add a separate task for tests…"></textarea>
+      <button class="ghost" id="replanBtn" style="width:100%;margin-top:8px" data-i18n>↺ Replan with feedback</button>
     </div>
 
     <div class="panel" id="planningPanel" style="display:none">
-      <div class="planwait"><div class="spinner"></div>Team lead analizira zadatak i pravi plan taskova…</div>
+      <div class="planwait"><div class="spinner"></div><span data-i18n>The team lead is analyzing the task and drafting a task plan…</span></div>
     </div>
 
     <div class="panel" id="steerPanel" style="display:none">
-      <h2>📣 Poruči timu (uživo)</h2>
+      <h2 data-i18n>📣 Message the team (live)</h2>
       <div class="row">
-        <select id="steerTarget" style="flex:0 0 160px"><option value="">Ceo tim</option></select>
-        <input type="text" id="steerMsg" placeholder="npr: koristi TypeScript strict; ne diraj css folder…">
-        <button class="ghost" id="steerSend" style="flex:0 0 auto">Pošalji</button>
+        <select id="steerTarget" style="flex:0 0 160px"><option value="" data-i18n>Whole team</option></select>
+        <input type="text" id="steerMsg" data-i18n-ph placeholder="e.g.: use TypeScript strict; don't touch the css folder…">
+        <button class="ghost" id="steerSend" style="flex:0 0 auto" data-i18n>Send</button>
       </div>
-      <div class="hint">Direktiva se ubacuje u sledeću epizodu (celom timu ili izabranom tasku) i važi do kraja runa.</div>
+      <div class="hint" data-i18n>The directive is injected into the next episode (whole team or the selected task) and lasts until the end of the run.</div>
     </div>
 
     <div class="panel">
-      <h2>Agenti</h2>
-      <div class="agents" id="agents"><span style="color:var(--muted);font-size:.82rem">Zadaj cilj — team lead prvo pravi plan, pa tim kreće…</span></div>
+      <h2 data-i18n>Agents</h2>
+      <div class="agents" id="agents"><span style="color:var(--muted);font-size:.82rem" data-i18n>Set a goal — the team lead makes a plan first, then the team starts…</span></div>
     </div>
 
     <div class="panel">
@@ -345,34 +349,247 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
     </div>
 
     <div class="panel" id="streamsPanel">
-      <h2>🖥 Živi rad agenata <span class="hint" style="font-weight:400">— šta svaki agent piše/pokreće uživo</span></h2>
-      <div class="streams" id="agentStreams"><span class="streamEmpty">Kad tim krene, ovde vidiš uživo šta svaki programer kuca, koje komande QA pokreće i šta team lead pregleda.</span></div>
+      <h2><span data-i18n>🖥 Live agent work</span> <span class="hint" style="font-weight:400" data-i18n>— what each agent is writing/running live</span></h2>
+      <div class="streams" id="agentStreams"><span class="streamEmpty" data-i18n>Once the team starts, you'll see live what each programmer is typing, which commands QA runs and what the team lead reviews.</span></div>
     </div>
   </section>
 </main>
 
-<dialog id="taskDialog"><div id="taskDialogBody"></div><button class="ghost" onclick="taskDialog.close()" style="margin-top:10px">Zatvori</button></dialog>
+<dialog id="taskDialog"><div id="taskDialogBody"></div><button class="ghost" onclick="taskDialog.close()" style="margin-top:10px" data-i18n>Close</button></dialog>
 
 <dialog id="dirDialog">
-  <h2 style="margin-bottom:4px">Izaberi folder</h2>
+  <h2 style="margin-bottom:4px" data-i18n>Choose folder</h2>
   <div class="dirpath" id="dirPath"></div>
   <div class="dirlist" id="dirList"></div>
   <div class="row" style="margin-top:12px">
-    <button class="ghost" id="dirUp">⬆ Nadfolder</button>
+    <button class="ghost" id="dirUp" data-i18n>⬆ Parent folder</button>
     <button class="ghost" id="dirHome">🏠 Home</button>
-    <button class="ghost" id="dirNewFolder">🆕 Novi folder</button>
-    <button class="primary" id="dirChoose" style="margin-top:0">✓ Izaberi ovaj folder</button>
+    <button class="ghost" id="dirNewFolder" data-i18n>🆕 New folder</button>
+    <button class="primary" id="dirChoose" style="margin-top:0" data-i18n>✓ Choose this folder</button>
   </div>
-  <button class="ghost" onclick="dirDialog.close()" style="margin-top:10px;width:100%">Otkaži</button>
+  <button class="ghost" onclick="dirDialog.close()" style="margin-top:10px;width:100%" data-i18n>Cancel</button>
 </dialog>
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// ---------- i18n ----------
+// English is the source of truth (markup + all t() call sites). SR_UI maps
+// each English string to its Serbian translation; anything missing falls back to English.
+// Server-emitted log/status messages arrive already localized — never translated here.
+let curLang = 'en';
+const SR_UI = {
+  'Agentura — AI Dev Team': 'Agentura — AI Dev Tim',
+  'AI dev team — team lead plan · approval · parallel programmers · review · QA': 'AI dev tim — team lead plan · odobrenje · paralelni programeri · review · QA',
+  'API key settings': 'Podešavanja API ključeva',
+  '🔑 Key settings': '🔑 Podešavanja ključeva',
+  '📁 Project': '📁 Projekat',
+  'Refresh tree': 'Osveži stablo',
+  '(session not yet bound to a folder)': '(sesija još nije vezana za folder)',
+  '📁 Choose project folder': '📁 Izaberi folder projekta',
+  'Team setup': 'Podešavanje tima',
+  'Programmers': 'Programeri',
+  'Task for the team': 'Zadatak za tim',
+  '(goal — the team lead breaks it into tasks)': '(cilj — team lead ga razbija na taskove)',
+  'e.g.:\nBuild a TODO web app: Node backend with a REST API,\nfrontend in plain HTML/JS, storage in a JSON file, tests.':
+    'npr:\nNapravi TODO web aplikaciju: Node backend sa REST API-jem,\nfrontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi.',
+  'Workspace': 'Radni prostor',
+  'New project': 'Novi projekat',
+  'Existing folder': 'Postojeći folder',
+  'New project location': 'Lokacija novog projekta',
+  '📁 Browse': '📁 Izaberi',
+  'Project name': 'Ime projekta',
+  'Project folder': 'Folder projekta',
+  '(not selected)': '(nije izabran)',
+  'Engine': 'Motor',
+  '(quick pick for all — mix per role below)': '(brzi izbor za sve — ispod možeš da mešaš po ulozi)',
+  'Engine + model per role': 'Motor + model po ulozi',
+  '(mixable, e.g. Claude lead + Kimi programmers)': '(mogu da se mešaju, npr. Claude lead + Kimi programeri)',
+  'loading…': 'učitavam…',
+  '⚠ MOCK mode — ANTHROPIC_API_KEY is not set in .env on the server. The team is simulated without real calls.': '⚠ MOCK mod — ANTHROPIC_API_KEY nije postavljen u .env na serveru. Tim se simulira bez pravih poziva.',
+  '⚙ Advanced': '⚙ Napredno',
+  'Final integration QA of the whole project': 'Završni integracioni QA celog projekta',
+  'Ask for my approval before merge': 'Traži moje odobrenje pre merge-a',
+  'PR mode (git push + gh pr create)': 'PR režim (git push + gh pr create)',
+  'PR mode requires a git remote and the gh CLI; tasks are not merged locally so integration QA is skipped.': 'PR režim zahteva git remote i gh CLI; taskovi se ne merge-uju lokalno pa se integracioni QA preskače.',
+  'Email notification (Resend)': 'Email notifikacija (Resend)',
+  'Send to': 'Pošalji na',
+  'Send test email': 'Pošalji test email',
+  "Sending goes through the Resend API (the key lives on the server). Note: until you verify your own domain on resend.com, Resend only delivers to the Resend account owner's email, from onboarding@resend.dev.": 'Slanje ide preko Resend API-ja (ključ je na serveru). Napomena: dok ne verifikuješ svoj domen na resend.com, Resend šalje samo na email vlasnika Resend naloga, sa adrese onboarding@resend.dev.',
+  '🧠 Team lead: create a plan': '🧠 Team lead: napravi plan',
+  '❓ Ask the team lead (answer, no tasks)': '❓ Pitaj team lead-a (odgovor, bez taskova)',
+  'Same input above: "create a plan" splits the work across the team, while "ask" only answers (how something is used, where things are…) — reads code as needed, changes nothing.': 'Isti input gore: „napravi plan" deli posao timu, a „pitaj" samo odgovara (kako se nešto koristi, gde je šta…) — čita kod po potrebi, ništa ne menja.',
+  '⚡ Solo agent (no plan)': '⚡ Solo agent (bez plana)',
+  'Role': 'Uloga',
+  '👨‍💻 Programmer — implements the task': '👨‍💻 Programer — implementira zadatak',
+  '🔍 Team lead — code review / analysis': '🔍 Team lead — code review / analiza',
+  '❓ Team lead — answers a question': '❓ Team lead — odgovor na pitanje',
+  '🧪 QA — tests the project': '🧪 QA — testira projekat',
+  'One agent, one episode — no plan or review chain. Uses the goal/description, workspace, engine and model of that role from the settings above. The programmer works directly on the main branch (changes are committed); the team lead and QA produce a report (+ email if provided).': 'Jedan agent, jedna epizoda — bez plana i review lanca. Koristi cilj/opis, radni prostor, motor i model te uloge iz podešavanja iznad. Programer radi direktno na main grani (izmene se komituju), team lead i QA daju izveštaj (+ email ako je unet).',
+  '▶ Run solo agent': '▶ Pokreni solo agenta',
+  '■ Stop': '■ Zaustavi',
+  '📜 Run history': '📜 Istorija runova',
+  '(no saved runs)': '(nema sačuvanih runova)',
+  '▶ Resume now': '▶ Nastavi odmah',
+  "If you topped up your limit/tokens you don't have to wait — click Resume now. Interrupted episodes continue the same conversation (--resume), they don't start from scratch.": 'Ako si dopunio limit/tokene, ne moraš da čekaš — klikni Nastavi odmah. Prekinute epizode nastavljaju isti razgovor (--resume), ne kreću od nule.',
+  '⏯ Found an interrupted run (the server was shut down mid-work):': '⏯ Pronađen prekinut run (server je bio ugašen usred rada):',
+  '📂 Open project': '📂 Otvori projekat',
+  '📋 Plan proposal — awaiting your approval': '📋 Predlog plana — čeka tvoje odobrenje',
+  '+ Add task': '+ Dodaj task',
+  '✓ Approve plan and start the team': '✓ Odobri plan i pokreni tim',
+  'Feedback (for a new plan)': 'Primedbe (za novi plan)',
+  'e.g.: merge tasks 2 and 3, add a separate task for tests…': 'npr: spoji taskove 2 i 3, dodaj poseban task za testove…',
+  '↺ Replan with feedback': '↺ Ponovi planiranje uz primedbe',
+  'The team lead is analyzing the task and drafting a task plan…': 'Team lead analizira zadatak i pravi plan taskova…',
+  '📣 Message the team (live)': '📣 Poruči timu (uživo)',
+  'Whole team': 'Ceo tim',
+  "e.g.: use TypeScript strict; don't touch the css folder…": 'npr: koristi TypeScript strict; ne diraj css folder…',
+  'Send': 'Pošalji',
+  'The directive is injected into the next episode (whole team or the selected task) and lasts until the end of the run.': 'Direktiva se ubacuje u sledeću epizodu (celom timu ili izabranom tasku) i važi do kraja runa.',
+  'Agents': 'Agenti',
+  'Set a goal — the team lead makes a plan first, then the team starts…': 'Zadaj cilj — team lead prvo pravi plan, pa tim kreće…',
+  '🖥 Live agent work': '🖥 Živi rad agenata',
+  '— what each agent is writing/running live': '— šta svaki agent piše/pokreće uživo',
+  "Once the team starts, you'll see live what each programmer is typing, which commands QA runs and what the team lead reviews.": 'Kad tim krene, ovde vidiš uživo šta svaki programer kuca, koje komande QA pokreće i šta team lead pregleda.',
+  'Close': 'Zatvori',
+  'Choose folder': 'Izaberi folder',
+  '⬆ Parent folder': '⬆ Nadfolder',
+  '🆕 New folder': '🆕 Novi folder',
+  '✓ Choose this folder': '✓ Izaberi ovaj folder',
+  'Cancel': 'Otkaži',
+  // --- dynamic (JS-built) strings ---
+  'Queued': 'U redu čekanja',
+  'Coding': 'Programiranje',
+  'QA testing': 'QA testiranje',
+  'Done': 'Završeno',
+  '(default from Claude Code settings)': '(default iz Claude Code podešavanja)',
+  'Fable (strongest — burns through the limit fast)': 'Fable (najjači — brzo troši limit)',
+  'Cannot load the model list: {err}': 'Ne mogu da učitam listu modela: {err}',
+  'Claude Code CLI was not found on the server': 'Claude Code CLI nije pronađen na serveru',
+  'KIMI_API_KEY is not set in .env': 'KIMI_API_KEY nije postavljen u .env',
+  'Claude Code uses your claude.ai subscription (watch the 5h limit)': 'Claude Code troši claude.ai pretplatu (pazi na 5h limit)',
+  'Kimi uses your Kimi For Coding subscription': 'Kimi troši Kimi For Coding pretplatu',
+  '⚠ KIMI_API_KEY is not in .env': '⚠ KIMI_API_KEY nije u .env',
+  '⚠ Claude API key is INVALID (401)': '⚠ Claude API ključ je NEVAŽEĆI (401)',
+  'Claude API without a key = MOCK': 'Claude API bez ključa = MOCK',
+  'Claude API uses credits (pay-per-token)': 'Claude API troši kredite (pay-per-token)',
+  '(no subfolders)': '(nema podfoldera)',
+  'New folder name:': 'Ime novog foldera:',
+  'New folder works in the session project picker mode.': 'Novi folder radi u režimu izbora projekta za sesiju.',
+  '(empty folder)': '(prazan folder)',
+  '(empty)': '(prazno)',
+  '(binary file)': '(binaran fajl)',
+  '(too big to preview — {kb} KB)': '(prevelik za pregled — {kb} KB)',
+  '(no folder bound)': '(nije vezan folder)',
+  'Close project': 'Zatvori projekat',
+  '＋ New project': '＋ Novi projekat',
+  '📋 {name}: plan ready ({n} tasks) — awaiting approval.': '📋 {name}: plan spreman ({n} taskova) — čeka odobrenje.',
+  'Planning failed: {err}': 'Planiranje nije uspelo: {err}',
+  "❓ Team lead's answer": '❓ Odgovor team lead-a',
+  '🎉 All tasks finished!': '🎉 Svi taskovi završeni!',
+  '⚠ Finished {done}/{total}, stuck: {stuck} — click ↻ on the card to retry.': '⚠ Završeno {done}/{total}, zaglavljeno: {stuck} — klikni ↻ na kartici za novi pokušaj.',
+  'Details in the log.': 'Detalji u logu.',
+  'Details in the log + email notification.': 'Detalji u logu + email notifikacija.',
+  '{name}: the team finished {done}/{total} tasks.': '{name}: tim je završio {done}/{total} taskova.',
+  '{n} API calls': '{n} API poziva',
+  'idle': 'neaktivan',
+  'the team lead is drafting a plan…': 'team lead pravi plan…',
+  'plan awaits your approval': 'plan čeka tvoje odobrenje',
+  'the team is working…': 'tim radi…',
+  'finished': 'završeno',
+  '⏸ paused — plan limit': '⏸ pauza — limit plana',
+  'Goal:': 'Cilj:',
+  'Remove task': 'Ukloni task',
+  '✅ Acceptance criteria — QA tests exactly this, one per line (feel free to add your own)': '✅ Kriterijumi prihvatanja — QA testira tačno ovo, jedan po redu (slobodno dopiši svoje)',
+  'e.g.: The list loads and shows data\nInvalid input shows a message, does not crash the screen': 'npr: Lista se učitava i prikazuje podatke\nNevalidan unos prikazuje poruku, ne ruši ekran',
+  '🔗 depends on tasks:': '🔗 zavisi od taskova:',
+  'e.g. 1,3': 'npr. 1,3',
+  'size:': 'veličina:',
+  'Rough estimate: ~{min} min sequential (less in parallel, depends on the dependency graph and engine).': 'Gruba procena: ~{min} min sekvencijalno (paralelno manje, zavisi od grafa zavisnosti i motora).',
+  'New task': 'Novi task',
+  '⏸ Claude plan limit reached — run paused, resuming automatically in {time}.': '⏸ Limit Claude plana dostignut — run pauziran, automatski nastavak za {time}.',
+  '{done}/{total} finished': '{done}/{total} završeno',
+  '⏯ Resume run': '⏯ Nastavi run',
+  'Delete snapshot': 'Obriši snimak',
+  'Programmer': 'Programer',
+  'Click for details · drag a task onto a programmer for manual assignment': 'Klik za detalje · prevuci task na programera za ručnu dodelu',
+  'working on task #{id}': 'radi na tasku #{id}',
+  'done': 'završio',
+  'waiting for work': 'čeka posao',
+  'file': 'fajl',
+  'working #{id}': 'radi #{id}',
+  'waiting': 'čeka',
+  'Usage: ~${cost} · {calls} calls · in {in} (+{cache} cache) · out {out}': 'Potrošnja: ~${cost} · {calls} poziva · in {in} (+{cache} keš) · out {out}',
+  'Last output (live):': 'Poslednji izlaz (uživo):',
+  '(nothing yet)': '(još ništa)',
+  '🔴 fix needed': '🔴 popravka',
+  '✋ awaiting merge': '✋ čeka merge',
+  'acceptance criteria': 'kriterijuma prihvatanja',
+  '↻ Retry': '↻ Pokušaj ponovo',
+  '✓ Merge to main': '✓ Merge u main',
+  'Error: {err}': 'Greška: {err}',
+  '⤢ Show diff': '⤢ Prikaži diff',
+  '(empty diff)': '(prazan diff)',
+  'Review cycles': 'Review ciklusa',
+  '🔗 depends on #{ids}': '🔗 zavisi od #{ids}',
+  '{n} calls': '{n} poziva',
+  'Files:': 'Fajlovi:',
+  '✅ Acceptance criteria (QA test plan):': '✅ Kriterijumi prihvatanja (QA test plan):',
+  'Choose a location for the new project (📁 Browse).': 'Izaberi lokaciju novog projekta (📁 Izaberi).',
+  'Enter a name for the new project.': 'Unesi ime novog projekta.',
+  'Choose the existing project folder (📁 Browse).': 'Izaberi folder postojećeg projekta (📁 Izaberi).',
+  'Enter a git clone URL.': 'Unesi git clone URL.',
+  'Describe the task (goal) for the team.': 'Opiši zadatak (cilj) za tim.',
+  'Describe in the goal field what the solo agent should do.': 'Opiši u polju za cilj šta solo agent treba da uradi.',
+  'Type a question in the goal field — the team lead will answer.': 'Upiši pitanje u polje za cilj — team lead će da odgovori.',
+  'The plan has no tasks.': 'Plan nema nijedan task.',
+  'Write your feedback, then click "Replan".': 'Upiši primedbe pa klikni „Ponovi planiranje".',
+  'Enter a recipient email.': 'Unesi email primaoca.',
+  '📧 Test email sent — check your inbox.': '📧 Test email poslat — proveri inbox.',
+  'Email error: {err}': 'Email greška: {err}',
+};
+// gettext-style helper: translates when lang is 'sr', interpolates {x} placeholders.
+function t(s, vars) {
+  let out = (curLang === 'sr' && SR_UI[s]) || s;
+  if (vars) for (const k of Object.keys(vars)) out = out.split('{' + k + '}').join(String(vars[k]));
+  return out;
+}
+function localeTag() { return curLang === 'sr' ? 'sr-RS' : 'en-GB'; }
+// Walks data-i18n / data-i18n-ph / data-i18n-title markup (capturing the English
+// source text as the key on first run) and re-renders all dynamic UI.
+function applyLang() {
+  document.documentElement.lang = curLang;
+  document.title = t('Agentura — AI Dev Team');
+  if ($('langSel')) $('langSel').value = curLang;
+  for (const el of document.querySelectorAll('[data-i18n]')) {
+    if (!el.dataset.i18nKey) el.dataset.i18nKey = el.textContent.trim();
+    el.textContent = t(el.dataset.i18nKey);
+  }
+  for (const el of document.querySelectorAll('[data-i18n-ph]')) {
+    if (!el.dataset.i18nPhKey) el.dataset.i18nPhKey = el.getAttribute('placeholder') || '';
+    el.setAttribute('placeholder', t(el.dataset.i18nPhKey));
+  }
+  for (const el of document.querySelectorAll('[data-i18n-title]')) {
+    if (!el.dataset.i18nTitleKey) el.dataset.i18nTitleKey = el.getAttribute('title') || '';
+    el.setAttribute('title', t(el.dataset.i18nTitleKey));
+  }
+  if (typeof existLoc !== 'undefined' && !existLoc && $('wsExistLoc')) $('wsExistLoc').textContent = t('(not selected)');
+  // re-render dynamic parts in the new language
+  for (const r of ROLE_SELS) {
+    const sel = $(r.model);
+    if (!sel || !sel.options.length || !$(r.eng).value) continue;
+    const v = sel.value;
+    renderRoleModels(r);
+    if ([...sel.options].some((o) => o.value === v)) sel.value = v;
+  }
+  renderEngineHint();
+  renderTabs(); renderAll(); renderProject(); loadRuns(); loadResumable();
+}
 const COLS = [
-  ['queued','U redu čekanja'], ['coding','Programiranje'], ['in_review','Code review'],
-  ['in_qa','QA testiranje'], ['done','Završeno'],
+  ['queued','Queued'], ['coding','Coding'], ['in_review','Code review'],
+  ['in_qa','QA testing'], ['done','Done'],
 ];
-// needs_fix se prikazuje u koloni Programiranje (čeka programera), stuck u Završeno sa oznakom
+// needs_fix is shown in the Coding column (waiting for a programmer), stuck in Done with a badge
 const COL_OF = { queued:'queued', coding:'coding', needs_fix:'coding', in_review:'in_review', in_qa:'in_qa', awaiting_merge:'in_qa', done:'done', stuck:'done' };
 const FALLBACK_MODELS = [
   { id:'claude-sonnet-4-5', name:'Claude Sonnet 4.5 (fallback)' },
@@ -401,8 +618,8 @@ document.querySelectorAll('input[name=wsmode]').forEach((r) => r.addEventListene
 
 // ---------- models & engine ----------
 const CC_MODELS = [
-  { id: '', name: '(default iz Claude Code podešavanja)' },
-  { id: 'fable', name: 'Fable (najjači — brzo troši limit)' },
+  { id: '', name: '(default from Claude Code settings)' },
+  { id: 'fable', name: 'Fable (strongest — burns through the limit fast)' },
   { id: 'opus', name: 'Opus' },
   { id: 'sonnet', name: 'Sonnet' },
   { id: 'haiku', name: 'Haiku' },
@@ -447,7 +664,7 @@ function renderRoleModels(r) {
   const eng = $(r.eng).value;
   const list = modelsForEngine(eng);
   const sel = $(r.model);
-  sel.innerHTML = list.map((m) => `<option value="${escAttr(m.id)}">${esc(m.name || m.id)}</option>`).join('');
+  sel.innerHTML = list.map((m) => `<option value="${escAttr(m.id)}">${esc(t(m.name || m.id))}</option>`).join('');
   sel.value = eng === 'claude-code' ? r.ccDflt
     : eng === 'kimi' ? (list.find((m) => m.id.includes('highspeed')) || list[0]).id
     : (list.find((m) => m.id.includes(r.apiPref)) || list[0]).id;
@@ -467,9 +684,9 @@ function renderEngineHint() {
   const anyApi = engs.includes('api'), anyCC = engs.includes('claude-code'), anyKimi = engs.includes('kimi');
   $('mockBadge').style.display = anyApi && apiMock ? 'block' : 'none';
   const parts = [];
-  if (anyCC) parts.push('Claude Code troši claude.ai pretplatu (pazi na 5h limit)');
-  if (anyKimi) parts.push(kimiAvailable ? 'Kimi troši Kimi For Coding pretplatu' : '⚠ KIMI_API_KEY nije u .env');
-  if (anyApi) parts.push(apiKeyInvalid ? '⚠ Claude API ključ je NEVAŽEĆI (401)' : apiMock ? 'Claude API bez ključa = MOCK' : 'Claude API troši kredite (pay-per-token)');
+  if (anyCC) parts.push(t('Claude Code uses your claude.ai subscription (watch the 5h limit)'));
+  if (anyKimi) parts.push(kimiAvailable ? t('Kimi uses your Kimi For Coding subscription') : t('⚠ KIMI_API_KEY is not in .env'));
+  if (anyApi) parts.push(apiKeyInvalid ? t('⚠ Claude API key is INVALID (401)') : apiMock ? t('Claude API without a key = MOCK') : t('Claude API uses credits (pay-per-token)'));
   $('engineHint').textContent = parts.join(' · ');
 }
 
@@ -482,16 +699,16 @@ async function loadModels() {
   claudeCodeVer = j.claudeCode;
   kimiModels = j.kimi?.models || [];
   kimiAvailable = !!j.kimi?.available;
-  if (j.error) showBanner('Ne mogu da učitam listu modela: ' + j.error, true);
+  if (j.error) showBanner(t('Cannot load the model list: {err}', { err: j.error }), true);
   if (!claudeCodeVer) {
     $('engineCCLabel').style.opacity = '.4';
     $('engineCCLabel').querySelector('input').disabled = true;
-    $('engineCCLabel').title = 'Claude Code CLI nije pronađen na serveru';
+    $('engineCCLabel').title = t('Claude Code CLI was not found on the server');
   }
   if (!kimiAvailable) {
     $('engineKimiLabel').style.opacity = '.4';
     $('engineKimiLabel').querySelector('input').disabled = true;
-    $('engineKimiLabel').title = 'KIMI_API_KEY nije postavljen u .env';
+    $('engineKimiLabel').title = t('KIMI_API_KEY is not set in .env');
   }
   // API engine unusable (no key / dead key) + Claude Code available → preselect it
   if ((apiMock || apiKeyInvalid) && claudeCodeVer) {
@@ -516,7 +733,7 @@ async function loadDir(p) {
   $('dirUp').disabled = !j.parent;
   $('dirList').innerHTML = j.dirs.length
     ? j.dirs.map((d) => `<div class="diritem" data-d="${escAttr(d)}">📁 ${esc(d)}</div>`).join('')
-    : '<div class="diritem" style="cursor:default;color:var(--muted)">(nema podfoldera)</div>';
+    : `<div class="diritem" style="cursor:default;color:var(--muted)">${esc(t('(no subfolders)'))}</div>`;
 }
 $('dirList').addEventListener('click', (e) => {
   const d = e.target.closest('.diritem')?.dataset.d;
@@ -537,13 +754,13 @@ $('dirChoose').addEventListener('click', async () => {
 });
 // New folder inside the currently shown directory (for starting fresh projects)
 $('dirNewFolder').addEventListener('click', async () => {
-  const name = prompt('Ime novog foldera:');
+  const name = prompt(t('New folder name:'));
   if (!name || !name.trim()) return;
   const p = dirCur + (dirCur.endsWith(sep) ? '' : sep) + name.trim();
   if (dirTarget === 'session') { dirDialog.close(); return createSessionForDir(p, true); }
   if (dirTarget === 'bind') { dirDialog.close(); return bindCurrentSession(p, true); }
-  // za new/existing pickere samo uđi u novi folder posle kreiranja kroz bind API nema smisla — preskoči
-  showBanner('Novi folder radi u režimu izbora projekta za sesiju.', true);
+  // for the new/existing pickers, creating via the bind API makes no sense — skip
+  showBanner(t('New folder works in the session project picker mode.'), true);
 });
 function openDirPicker(target) {
   dirTarget = target;
@@ -585,7 +802,7 @@ function treeEntryHtml(rel, name, isDir) {
 }
 async function renderProject() {
   const ws = curWs();
-  $('projPath').textContent = ws || '(sesija još nije vezana za folder)';
+  $('projPath').textContent = ws || t('(session not yet bound to a folder)');
   $('projBind').style.display = ws ? 'none' : '';
   $('projRefresh').style.display = ws ? '' : 'none';
   $('wsSection').style.display = ws ? 'none' : '';
@@ -595,7 +812,7 @@ async function renderProject() {
   if (j.error) { $('fileTree').innerHTML = `<div class="fe file">${esc(j.error)}</div>`; return; }
   $('fileTree').innerHTML =
     j.dirs.map((d) => treeEntryHtml('.', d, true)).join('') +
-    j.files.map((f) => treeEntryHtml('.', f, false)).join('') || '<div class="fe file">(prazan folder)</div>';
+    j.files.map((f) => treeEntryHtml('.', f, false)).join('') || `<div class="fe file">${esc(t('(empty folder)'))}</div>`;
 }
 $('projBind').addEventListener('click', () => openDirPicker('bind'));
 $('projRefresh').addEventListener('click', renderProject);
@@ -612,7 +829,7 @@ $('fileTree').addEventListener('click', async (e) => {
         const j = await fetchTree(p);
         kids.innerHTML = j.error ? `<div class="fe file">${esc(j.error)}</div>` :
           (j.dirs.map((d) => treeEntryHtml(p, d, true)).join('') +
-           j.files.map((f) => treeEntryHtml(p, f, false)).join('') || '<div class="fe file">(prazno)</div>');
+           j.files.map((f) => treeEntryHtml(p, f, false)).join('') || `<div class="fe file">${esc(t('(empty)'))}</div>`);
       }
     } else kids.style.display = 'none';
     return;
@@ -621,7 +838,7 @@ $('fileTree').addEventListener('click', async (e) => {
   const r = await fetch(`/api/file?session=${encodeURIComponent(activeSession)}&path=${encodeURIComponent(p)}`);
   const j = await r.json();
   agentDialogId = null;
-  const body = j.error ? esc(j.error) : j.binary ? '(binaran fajl)' : j.tooBig ? `(prevelik za pregled — ${Math.round(j.size / 1024)} KB)` : esc(j.content);
+  const body = j.error ? esc(j.error) : j.binary ? esc(t('(binary file)')) : j.tooBig ? esc(t('(too big to preview — {kb} KB)', { kb: Math.round(j.size / 1024) })) : esc(j.content);
   $('taskDialogBody').innerHTML = `<h2 style="font-size:.9rem;word-break:break-all">📄 ${esc(p)}</h2><pre style="max-height:65vh">${body}</pre>`;
   taskDialog.showModal();
 });
@@ -648,11 +865,11 @@ function renderTabs() {
   $('tabs').innerHTML = sessionsList.map((s) => {
     const p = S[s.id]?.state?.phase || 'idle';
     const cls = p === 'running' ? 'running' : (p === 'planning' || p === 'awaiting_approval') ? 'plan' : '';
-    return `<div class="tab ${cls} ${s.id === activeSession ? 'active' : ''}" title="${escAttr(s.workspacePath || '(nije vezan folder)')}" onclick="switchTab('${s.id}')">
+    return `<div class="tab ${cls} ${s.id === activeSession ? 'active' : ''}" title="${escAttr(s.workspacePath || t('(no folder bound)'))}" onclick="switchTab('${s.id}')">
       <span class="tdot"></span>${esc(s.name)}
-      ${sessionsList.length > 1 ? `<span class="x" title="Zatvori projekat" onclick="event.stopPropagation();closeTab('${s.id}')">✕</span>` : ''}
+      ${sessionsList.length > 1 ? `<span class="x" title="${escAttr(t('Close project'))}" onclick="event.stopPropagation();closeTab('${s.id}')">✕</span>` : ''}
     </div>`;
-  }).join('') + `<div class="tab add" onclick="newTab()">＋ Novi projekat</div>`;
+  }).join('') + `<div class="tab add" onclick="newTab()">${esc(t('＋ New project'))}</div>`;
 }
 
 function saveForm(id) {
@@ -678,9 +895,9 @@ function restoreForm(id) {
   newLoc = f ? f.newLoc : homeDir;
   $('wsNewLoc').textContent = newLoc || '…';
   $('wsNewLoc').classList.toggle('set', !!newLoc);
-  $('wsNewName').value = f ? f.newName : 'novi-projekat';
+  $('wsNewName').value = f ? f.newName : 'new-project';
   existLoc = f ? f.existLoc : '';
-  $('wsExistLoc').textContent = existLoc || '(nije izabran)';
+  $('wsExistLoc').textContent = existLoc || t('(not selected)');
   $('wsExistLoc').classList.toggle('set', !!existLoc);
   $('wsGit').value = f ? f.git : '';
 }
@@ -719,6 +936,7 @@ es.onmessage = (m) => {
   const evt = JSON.parse(m.data);
 
   if (evt.type === 'hello') {
+    if (evt.lang === 'en' || evt.lang === 'sr') curLang = evt.lang;
     sessionsList = evt.sessions.map((s) => ({ id: s.id, name: s.name, workspacePath: s.workspacePath || '' }));
     for (const s of evt.sessions) {
       const box = ensureS(s.id);
@@ -730,9 +948,12 @@ es.onmessage = (m) => {
     bindActive();
     $('log').innerHTML = '';
     (S[activeSession].logEvents || []).forEach(addLogDom);
-    renderTabs();
-    renderAll();
-    renderProject();
+    applyLang(); // syncs the picker + re-renders tabs, panels and project in the right language
+    return;
+  }
+  if (evt.type === 'lang_changed') {
+    // another tab/window switched the language — follow it
+    if ((evt.lang === 'en' || evt.lang === 'sr') && evt.lang !== curLang) { curLang = evt.lang; applyLang(); }
     return;
   }
   if (evt.type === 'session_created') {
@@ -774,9 +995,9 @@ es.onmessage = (m) => {
     box.planDraft = structuredClone(box.state.plan);
     if (active) { planDraft = box.planDraft; renderAll(); }
     renderTabs(); beep();
-    if (Notification?.permission === 'granted') new Notification('Agent Harness', { body: `📋 ${sessionName(sid)}: plan spreman (${(box.state.plan || []).length} taskova) — čeka odobrenje.` });
+    if (Notification?.permission === 'granted') new Notification('Agentura', { body: t('📋 {name}: plan ready ({n} tasks) — awaiting approval.', { name: sessionName(sid), n: (box.state.plan || []).length }) });
   }
-  if (evt.type === 'plan_failed') { if (active) { renderAll(); showBanner('Planiranje nije uspelo: ' + evt.error, true); } renderTabs(); }
+  if (evt.type === 'plan_failed') { if (active) { renderAll(); showBanner(t('Planning failed: {err}', { err: evt.error }), true); } renderTabs(); }
   if (evt.type === 'agent_update') {
     const i = box.state.agents.findIndex((a) => a.id === evt.agent.id);
     // preserve the live activity buffer (agent_update payload doesn't carry it)
@@ -813,21 +1034,21 @@ es.onmessage = (m) => {
     const ok = evt.stuck === 0;
     if (active) {
       renderAll();
-      // ❓ pitanje → odmah prikaži odgovor team lead-a u dialogu
+      // ❓ question → immediately show the team lead's answer in a dialog
       if (box.state.soloRole === 'ask') {
         const ans = (box.state.tasks[0] && box.state.tasks[0].lastSummary) || evt.summary || '';
         agentDialogId = null;
-        $('taskDialogBody').innerHTML = `<h2>❓ Odgovor team lead-a</h2><pre style="max-height:70vh;white-space:pre-wrap">${esc(ans)}</pre>`;
+        $('taskDialogBody').innerHTML = `<h2>${esc(t("❓ Team lead's answer"))}</h2><pre style="max-height:70vh;white-space:pre-wrap">${esc(ans)}</pre>`;
         taskDialog.showModal();
       }
       if (evt.usage) renderCost(evt.usage);
       $('openWs').style.display = '';
       showBanner(
-        (ok ? '🎉 Svi taskovi završeni! ' : `⚠ Završeno ${evt.done}/${evt.total}, zaglavljeno: ${evt.stuck} — klikni ↻ na kartici za novi pokušaj. `) +
-        'Detalji u logu' + ($('notifyEmail').value ? ' + email notifikacija.' : '.'), !ok);
+        (ok ? t('🎉 All tasks finished!') : t('⚠ Finished {done}/{total}, stuck: {stuck} — click ↻ on the card to retry.', { done: evt.done, total: evt.total, stuck: evt.stuck })) + ' ' +
+        ($('notifyEmail').value ? t('Details in the log + email notification.') : t('Details in the log.')), !ok);
     }
     beep();
-    if (Notification?.permission === 'granted') new Notification('Agent Harness', { body: `${sessionName(sid)}: tim je završio ${evt.done}/${evt.total} taskova.` });
+    if (Notification?.permission === 'granted') new Notification('Agentura', { body: t('{name}: the team finished {done}/{total} tasks.', { name: sessionName(sid), done: evt.done, total: evt.total }) });
   }
 };
 
@@ -836,18 +1057,18 @@ function sessionName(id) { return (sessionsList.find((s) => s.id === id) || {}).
 function renderCost(u) {
   if (!u || !u.calls) { $('cost').textContent = ''; return; }
   $('cost').textContent = `💰 ~$${u.costUsd.toFixed(2)}`;
-  $('cost').title = `${u.calls} API poziva · in ${u.input} + cache ${u.cacheRead}r/${u.cacheWrite}w · out ${u.output}`;
+  $('cost').title = t('{n} API calls', { n: u.calls }) + ` · in ${u.input} + cache ${u.cacheRead}r/${u.cacheWrite}w · out ${u.output}`;
 }
 
 // ---------- render ----------
 const PHASE_TEXT = {
-  idle: 'neaktivan', planning: 'team lead pravi plan…', awaiting_approval: 'plan čeka tvoje odobrenje',
-  running: 'tim radi…', finished: 'završeno',
+  idle: 'idle', planning: 'the team lead is drafting a plan…', awaiting_approval: 'plan awaits your approval',
+  running: 'the team is working…', finished: 'finished',
 };
 function renderAll() {
   const p = state.phase || 'idle';
   const paused = state.pausedUntil && state.pausedUntil > Date.now();
-  $('statustext').textContent = paused ? '⏸ pauza — limit plana' : (PHASE_TEXT[p] || p);
+  $('statustext').textContent = paused ? t('⏸ paused — plan limit') : t(PHASE_TEXT[p] || p);
   renderPauseBar(paused);
   $('statusline').className = 'statusline' + (p === 'running' ? ' on' : p === 'planning' || p === 'awaiting_approval' ? ' plan' : '');
   $('planBtn').disabled = p === 'planning' || p === 'awaiting_approval' || p === 'running';
@@ -858,7 +1079,7 @@ function renderAll() {
   $('openWs').style.display = p === 'finished' ? '' : 'none';
   $('steerPanel').style.display = p === 'running' ? '' : 'none';
   if (p === 'running') {
-    $('steerTarget').innerHTML = '<option value="">Ceo tim</option>' +
+    $('steerTarget').innerHTML = `<option value="">${esc(t('Whole team'))}</option>` +
       state.tasks.filter((t) => !['done'].includes(t.status)).map((t) => `<option value="${t.id}">task #${t.id}: ${esc(t.title.slice(0, 30))}</option>`).join('');
   }
   renderCost(state.usage);
@@ -869,29 +1090,29 @@ function renderPlan() {
   const show = state.phase === 'awaiting_approval' && planDraft;
   $('planPanel').style.display = show ? '' : 'none';
   if (!show) return;
-  $('planGoal').textContent = 'Cilj: ' + (state.goal || '');
-  $('planList').innerHTML = planDraft.map((t, i) => `
+  $('planGoal').textContent = t('Goal:') + ' ' + (state.goal || '');
+  $('planList').innerHTML = planDraft.map((tk, i) => `
     <div class="plantask">
       <div class="row">
         <div class="num">#${i + 1}</div>
-        <input type="text" data-i="${i}" data-f="title" value="${escAttr(t.title)}">
-        <button class="ghost danger" data-del="${i}" title="Ukloni task">✕</button>
+        <input type="text" data-i="${i}" data-f="title" value="${escAttr(tk.title)}">
+        <button class="ghost danger" data-del="${i}" title="${escAttr(t('Remove task'))}">✕</button>
       </div>
-      <textarea data-i="${i}" data-f="description" rows="2">${esc(t.description || '')}</textarea>
-      <label style="margin:6px 0 2px;font-size:.7rem">✅ Kriterijumi prihvatanja — QA testira tačno ovo, jedan po redu (slobodno dopiši svoje)</label>
-      <textarea data-i="${i}" data-f="acceptance" rows="${Math.max(2, (t.acceptance || []).length)}" placeholder="npr: Lista se učitava i prikazuje podatke&#10;Nevalidan unos prikazuje poruku, ne ruši ekran">${esc((t.acceptance || []).join('\n'))}</textarea>
+      <textarea data-i="${i}" data-f="description" rows="2">${esc(tk.description || '')}</textarea>
+      <label style="margin:6px 0 2px;font-size:.7rem">${esc(t('✅ Acceptance criteria — QA tests exactly this, one per line (feel free to add your own)'))}</label>
+      <textarea data-i="${i}" data-f="acceptance" rows="${Math.max(2, (tk.acceptance || []).length)}" placeholder="${escAttr(t('e.g.: The list loads and shows data\nInvalid input shows a message, does not crash the screen'))}">${esc((tk.acceptance || []).join('\n'))}</textarea>
       <div class="row" style="margin-top:6px;align-items:center">
-        <label style="margin:0;flex:0 0 auto">🔗 zavisi od taskova:</label>
-        <input type="text" data-i="${i}" data-f="dependsOn" placeholder="npr. 1,3" value="${escAttr((t.dependsOn || []).join(','))}" style="flex:0 0 110px">
-        <label style="margin:0 0 0 8px;flex:0 0 auto">veličina:</label>
+        <label style="margin:0;flex:0 0 auto">${esc(t('🔗 depends on tasks:'))}</label>
+        <input type="text" data-i="${i}" data-f="dependsOn" placeholder="${escAttr(t('e.g. 1,3'))}" value="${escAttr((tk.dependsOn || []).join(','))}" style="flex:0 0 110px">
+        <label style="margin:0 0 0 8px;flex:0 0 auto">${esc(t('size:'))}</label>
         <select data-i="${i}" data-f="size" style="flex:0 0 64px">
-          ${['S','M','L'].map((z) => `<option ${((t.size || 'M') === z) ? 'selected' : ''}>${z}</option>`).join('')}
+          ${['S','M','L'].map((z) => `<option ${((tk.size || 'M') === z) ? 'selected' : ''}>${z}</option>`).join('')}
         </select>
       </div>
     </div>`).join('');
   const MIN = { S: 3, M: 8, L: 15 };
-  const total = planDraft.reduce((a, t) => a + (MIN[t.size || 'M'] || 8), 0);
-  $('planEstimate').textContent = `Gruba procena: ~${total} min sekvencijalno (paralelno manje, zavisi od grafa zavisnosti i motora).`;
+  const total = planDraft.reduce((a, tk) => a + (MIN[tk.size || 'M'] || 8), 0);
+  $('planEstimate').textContent = t('Rough estimate: ~{min} min sequential (less in parallel, depends on the dependency graph and engine).', { min: total });
 }
 $('planList').addEventListener('input', handlePlanEdit);
 $('planList').addEventListener('change', handlePlanEdit);
@@ -907,7 +1128,7 @@ $('planList').addEventListener('click', (e) => {
   const del = e.target.closest('[data-del]')?.dataset.del;
   if (del != null) { planDraft.splice(Number(del), 1); renderPlan(); }
 });
-$('planAdd').addEventListener('click', () => { planDraft.push({ title: 'Novi task', description: '' }); renderPlan(); });
+$('planAdd').addEventListener('click', () => { planDraft.push({ title: t('New task'), description: '' }); renderPlan(); });
 
 // ---------- rate-limit pause bar ----------
 function renderPauseBar(paused) {
@@ -915,7 +1136,7 @@ function renderPauseBar(paused) {
   if (!paused) return;
   const left = Math.max(0, state.pausedUntil - Date.now());
   const mm = Math.floor(left / 60000), ss = Math.floor((left % 60000) / 1000);
-  $('pauseText').textContent = `⏸ Limit Claude plana dostignut — run pauziran, automatski nastavak za ${mm}:${String(ss).padStart(2, '0')}.`;
+  $('pauseText').textContent = t('⏸ Claude plan limit reached — run paused, resuming automatically in {time}.', { time: `${mm}:${String(ss).padStart(2, '0')}` });
 }
 setInterval(() => {
   const paused = state.pausedUntil && state.pausedUntil > Date.now();
@@ -938,10 +1159,10 @@ async function loadResumable() {
       <div class="row" style="align-items:center;margin-top:6px">
         <div style="flex:1;font-weight:400">
           <b>${esc((r.goal || '').slice(0, 90))}</b><br>
-          <span class="hint">${r.done}/${r.total} završeno · ${esc(r.workspacePath || '')}</span>
+          <span class="hint">${esc(t('{done}/{total} finished', { done: r.done, total: r.total }))} · ${esc(r.workspacePath || '')}</span>
         </div>
-        <button class="ghost" data-resume="${escAttr(r.id)}" style="flex:0 0 auto">⏯ Nastavi run</button>
-        <button class="ghost danger" data-discard="${escAttr(r.id)}" style="flex:0 0 auto" title="Obriši snimak">✕</button>
+        <button class="ghost" data-resume="${escAttr(r.id)}" style="flex:0 0 auto">${esc(t('⏯ Resume run'))}</button>
+        <button class="ghost danger" data-discard="${escAttr(r.id)}" style="flex:0 0 auto" title="${escAttr(t('Delete snapshot'))}">✕</button>
       </div>`).join('');
   } catch { /* server unreachable — ignore */ }
 }
@@ -969,25 +1190,25 @@ function showBanner(msg, isErr) {
 
 function renderAgents() {
   if (!state.agents.length) {
-    $('agents').innerHTML = '<span style="color:var(--muted);font-size:.82rem">Zadaj cilj — team lead prvo pravi plan, pa tim kreće…</span>';
+    $('agents').innerHTML = `<span style="color:var(--muted);font-size:.82rem">${esc(t('Set a goal — the team lead makes a plan first, then the team starts…'))}</span>`;
     return;
   }
-  const R = { programmer: 'Programer', reviewer: 'Team Lead', qa: 'QA' };
+  const R = { programmer: t('Programmer'), reviewer: 'Team Lead', qa: 'QA' };
   const dropAttrs = (a) => a.role !== 'programmer' ? '' :
     `ondragover="event.preventDefault();this.classList.add('dropok')" ondragleave="this.classList.remove('dropok')" ondrop="this.classList.remove('dropok');dropOnAgent(event,${a.id})"`;
   $('agents').innerHTML = state.agents.map((a) => `
-    <div class="agent ${a.status === 'working' ? 'working' : ''}" ${dropAttrs(a)} onclick="openAgent(${a.id})" style="cursor:pointer" title="Klik za detalje · prevuci task na programera za ručnu dodelu">
+    <div class="agent ${a.status === 'working' ? 'working' : ''}" ${dropAttrs(a)} onclick="openAgent(${a.id})" style="cursor:pointer" title="${escAttr(t('Click for details · drag a task onto a programmer for manual assignment'))}">
       <div class="name"><span class="dot"></span>${a.name}<span class="rolebadge r-${a.role}">${R[a.role]}</span></div>
-      <div class="st">${a.status === 'working' ? 'radi na tasku #' + a.currentTaskId : a.status === 'done' ? 'završio' : 'čeka posao'}${a.usage && a.usage.costUsd ? ` · ~$${a.usage.costUsd.toFixed(2)}` : ''}</div>
+      <div class="st">${a.status === 'working' ? esc(t('working on task #{id}', { id: a.currentTaskId })) : a.status === 'done' ? esc(t('done')) : esc(t('waiting for work'))}${a.usage && a.usage.costUsd ? ` · ~$${a.usage.costUsd.toFixed(2)}` : ''}</div>
     </div>`).join('');
 }
 
 // ---------- live agent work streams ----------
-const R_LABEL = { programmer: 'Programer', reviewer: 'Team Lead', qa: 'QA' };
+const R_LABEL = { programmer: 'Programmer', reviewer: 'Team Lead', qa: 'QA' };
 function activityLineHtml(e) {
   if (e.kind === 'write') {
     const preview = e.text ? `<pre class="code">${esc(e.text)}</pre>` : '';
-    return `<div class="ln write"><span class="ic">📝</span>${esc(e.file || 'fajl')}${preview}</div>`;
+    return `<div class="ln write"><span class="ic">📝</span>${esc(e.file || t('file'))}${preview}</div>`;
   }
   if (e.kind === 'cmd') return `<div class="ln cmd"><span class="ic">▶</span>${esc(e.text || '')}</div>`;
   if (e.kind === 'read') return `<div class="ln read"><span class="ic">📖</span>${esc(e.file || e.text || '')}</div>`;
@@ -997,18 +1218,18 @@ function activityLineHtml(e) {
   return `<div class="ln tool"><span class="ic">🔧</span>${esc(e.tool || '')} ${esc(e.text || '')}</div>`;
 }
 function laneStatus(a) {
-  return a.status === 'working' ? 'radi #' + a.currentTaskId : a.status === 'done' ? 'završio' : 'čeka';
+  return a.status === 'working' ? t('working #{id}', { id: a.currentTaskId }) : a.status === 'done' ? t('done') : t('waiting');
 }
 function renderStreams() {
   const el = $('agentStreams');
   const agents = (state.agents || []).filter((a) => (a.activity && a.activity.length) || a.status === 'working');
   if (!agents.length) {
-    el.innerHTML = '<span class="streamEmpty">Kad tim krene, ovde vidiš uživo šta svaki programer kuca, koje komande QA pokreće i šta team lead pregleda.</span>';
+    el.innerHTML = `<span class="streamEmpty">${esc(t("Once the team starts, you'll see live what each programmer is typing, which commands QA runs and what the team lead reviews."))}</span>`;
     return;
   }
   el.innerHTML = agents.map((a) => `
     <div class="lane ${a.status === 'working' ? 'working' : ''}" data-lane="${a.id}">
-      <div class="lh"><span class="dot"></span>${esc(a.name)}<span class="rolebadge r-${a.role}">${R_LABEL[a.role]}</span><span class="lst">${laneStatus(a)}</span></div>
+      <div class="lh"><span class="dot"></span>${esc(a.name)}<span class="rolebadge r-${a.role}">${esc(t(R_LABEL[a.role]))}</span><span class="lst">${esc(laneStatus(a))}</span></div>
       <div class="feed" id="feed-${a.id}">${(a.activity || []).map(activityLineHtml).join('') || '<span class="streamEmpty">…</span>'}</div>
     </div>`).join('');
   for (const a of agents) { const f = $('feed-' + a.id); if (f) f.scrollTop = f.scrollHeight; }
@@ -1033,27 +1254,27 @@ function refreshAgentDialog(id, force) {
   if (agentDialogId !== id || (!force && !taskDialog.open)) return;
   const a = state.agents.find((x) => x.id === id);
   if (!a) return;
-  const R = { programmer: 'Programer', reviewer: 'Team Lead', qa: 'QA' };
+  const R = { programmer: t('Programmer'), reviewer: 'Team Lead', qa: 'QA' };
   const u = a.usage || {};
   $('taskDialogBody').innerHTML = `<h2>${esc(a.name)} <span class="rolebadge r-${a.role}">${R[a.role]}</span></h2>
     <div class="hint">Status: ${a.status}${a.currentTaskId ? ' · task #' + a.currentTaskId : ''}
-    ${u.calls ? `<br>Potrošnja: ~$${(u.costUsd || 0).toFixed(3)} · ${u.calls} poziva · in ${u.input} (+${u.cacheRead} keš) · out ${u.output}` : ''}</div>
-    <p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">Poslednji izlaz (uživo):</p>
-    <pre>${esc(a.lastText || '(još ništa)')}</pre>`;
+    ${u.calls ? `<br>${esc(t('Usage: ~${cost} · {calls} calls · in {in} (+{cache} cache) · out {out}', { cost: (u.costUsd || 0).toFixed(3), calls: u.calls, in: u.input, cache: u.cacheRead, out: u.output }))}` : ''}</div>
+    <p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">${esc(t('Last output (live):'))}</p>
+    <pre>${esc(a.lastText || t('(nothing yet)'))}</pre>`;
 }
 
 function renderBoard() {
-  const depsOf = (t) => (t.dependsOn && t.dependsOn.length ? `<span>🔗 #${t.dependsOn.join(',#')}</span>` : '');
-  const costOf = (t) => (t.usage && t.usage.costUsd ? `<span>~$${t.usage.costUsd.toFixed(2)}</span>` : '');
-  const draggable = (t) => ['queued', 'needs_fix', 'stuck'].includes(t.status);
+  const depsOf = (tk) => (tk.dependsOn && tk.dependsOn.length ? `<span>🔗 #${tk.dependsOn.join(',#')}</span>` : '');
+  const costOf = (tk) => (tk.usage && tk.usage.costUsd ? `<span>~$${tk.usage.costUsd.toFixed(2)}</span>` : '');
+  const draggable = (tk) => ['queued', 'needs_fix', 'stuck'].includes(tk.status);
   $('board').innerHTML = COLS.map(([key, title]) => {
-    const items = state.tasks.filter((t) => COL_OF[t.status] === key);
-    return `<div class="col"><h3>${title}<span>${items.length}</span></h3>` + items.map((t) => `
-      <div class="card s-${t.status}" onclick="openTask(${t.id})" ${draggable(t) ? `draggable="true" ondragstart="dragTask(event,${t.id})"` : ''}>
-        <div>${t.pinnedTo ? '📌 ' : ''}#${t.id} ${esc(t.title)}${t.status === 'needs_fix' ? ' 🔴 popravka' : ''}${t.status === 'stuck' ? ' ⚠ STUCK' : ''}${t.status === 'awaiting_merge' ? ' ✋ čeka merge' : ''}</div>
-        <div class="meta"><span>👤 ${t.assignee || '—'}</span><span>🔁 rev ${t.reviewCycles}</span><span>🧪 qa ${t.qaCycles}</span>${t.acceptance && t.acceptance.length ? `<span title="kriterijuma prihvatanja">✅ ${t.acceptance.length}</span>` : ''}${depsOf(t)}${costOf(t)}</div>
-        ${t.status === 'stuck' ? `<button class="ghost" style="margin-top:7px;width:100%" onclick="event.stopPropagation();retryTask(${t.id})">↻ Pokušaj ponovo</button>` : ''}
-        ${t.status === 'awaiting_merge' ? `<button class="primary" style="margin-top:7px;padding:7px" onclick="event.stopPropagation();approveMerge(${t.id})">✓ Merge u main</button>` : ''}
+    const items = state.tasks.filter((tk) => COL_OF[tk.status] === key);
+    return `<div class="col"><h3>${esc(t(title))}<span>${items.length}</span></h3>` + items.map((tk) => `
+      <div class="card s-${tk.status}" onclick="openTask(${tk.id})" ${draggable(tk) ? `draggable="true" ondragstart="dragTask(event,${tk.id})"` : ''}>
+        <div>${tk.pinnedTo ? '📌 ' : ''}#${tk.id} ${esc(tk.title)}${tk.status === 'needs_fix' ? ' ' + esc(t('🔴 fix needed')) : ''}${tk.status === 'stuck' ? ' ⚠ STUCK' : ''}${tk.status === 'awaiting_merge' ? ' ' + esc(t('✋ awaiting merge')) : ''}</div>
+        <div class="meta"><span>👤 ${tk.assignee || '—'}</span><span>🔁 rev ${tk.reviewCycles}</span><span>🧪 qa ${tk.qaCycles}</span>${tk.acceptance && tk.acceptance.length ? `<span title="${escAttr(t('acceptance criteria'))}">✅ ${tk.acceptance.length}</span>` : ''}${depsOf(tk)}${costOf(tk)}</div>
+        ${tk.status === 'stuck' ? `<button class="ghost" style="margin-top:7px;width:100%" onclick="event.stopPropagation();retryTask(${tk.id})">${esc(t('↻ Retry'))}</button>` : ''}
+        ${tk.status === 'awaiting_merge' ? `<button class="primary" style="margin-top:7px;padding:7px" onclick="event.stopPropagation();approveMerge(${tk.id})">${esc(t('✓ Merge to main'))}</button>` : ''}
       </div>`).join('') + '</div>';
   }).join('');
 }
@@ -1069,7 +1290,7 @@ async function dropOnAgent(e, agentId) {
   const sid = activeSession;
   const r = await fetch('/api/assign-task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId, agentId }) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
 }
@@ -1078,7 +1299,7 @@ async function approveMerge(id) {
   const sid = activeSession;
   const r = await fetch('/api/approve-merge', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId: id }) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
 }
@@ -1095,7 +1316,7 @@ async function showDiff(id) {
     return e;
   }).join('\n');
   agentDialogId = null;
-  $('taskDialogBody').innerHTML = `<h2>Diff — task #${id}</h2><div class="diffview">${colored || '(prazan diff)'}</div>`;
+  $('taskDialogBody').innerHTML = `<h2>Diff — task #${id}</h2><div class="diffview">${colored || esc(t('(empty diff)'))}</div>`;
   taskDialog.showModal();
 }
 
@@ -1152,7 +1373,7 @@ $('steerSend').addEventListener('click', async () => {
   const sid = activeSession;
   const r = await fetch('/api/steer', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId: $('steerTarget').value || null, message: msg }) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   $('steerMsg').value = '';
 });
 $('steerMsg').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('steerSend').click(); });
@@ -1161,23 +1382,23 @@ async function retryTask(id) {
   const sid = activeSession;
   const r = await fetch('/api/retry-task', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, taskId: id }) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   $('banner').style.display = 'none';
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
 }
 
 function openTask(id) {
-  const t = state.tasks.find((x) => x.id === id);
-  if (!t) return;
+  const tk = state.tasks.find((x) => x.id === id);
+  if (!tk) return;
   agentDialogId = null;
-  const u = t.usage || {};
-  $('taskDialogBody').innerHTML = `<h2>#${t.id} ${esc(t.title)} <button class="ghost" style="float:right" onclick="showDiff(${t.id})">⤢ Prikaži diff</button></h2>
-    <div class="hint">Status: ${t.status} · Programer: ${t.assignee || '—'} · Review ciklusa: ${t.reviewCycles} · QA: ${t.qaCycles}
-    ${t.dependsOn && t.dependsOn.length ? ' · 🔗 zavisi od #' + t.dependsOn.join(', #') : ''}
-    ${u.calls ? ` · ~$${(u.costUsd || 0).toFixed(3)} (${u.calls} poziva)` : ''}<br>Fajlovi: ${(t.changedFiles || []).map(esc).join(', ') || '—'}</div>
-    ${(t.acceptance && t.acceptance.length) ? `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">✅ Kriterijumi prihvatanja (QA test plan):</p><div style="font-size:.78rem;line-height:1.6">${t.acceptance.map((c, i) => `${i + 1}. ${esc(c)}`).join('<br>')}</div>` : ''}
-    ${(t.history || []).map((h) => `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">${h.role} — ${h.agent}</p><pre>${esc(h.text)}</pre>`).join('')}`;
+  const u = tk.usage || {};
+  $('taskDialogBody').innerHTML = `<h2>#${tk.id} ${esc(tk.title)} <button class="ghost" style="float:right" onclick="showDiff(${tk.id})">${esc(t('⤢ Show diff'))}</button></h2>
+    <div class="hint">Status: ${tk.status} · ${esc(t('Programmer'))}: ${tk.assignee || '—'} · ${esc(t('Review cycles'))}: ${tk.reviewCycles} · QA: ${tk.qaCycles}
+    ${tk.dependsOn && tk.dependsOn.length ? ' · ' + esc(t('🔗 depends on #{ids}', { ids: tk.dependsOn.join(', #') })) : ''}
+    ${u.calls ? ` · ~$${(u.costUsd || 0).toFixed(3)} (${esc(t('{n} calls', { n: u.calls }))})` : ''}<br>${esc(t('Files:'))} ${(tk.changedFiles || []).map(esc).join(', ') || '—'}</div>
+    ${(tk.acceptance && tk.acceptance.length) ? `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">${esc(t('✅ Acceptance criteria (QA test plan):'))}</p><div style="font-size:.78rem;line-height:1.6">${tk.acceptance.map((c, i) => `${i + 1}. ${esc(c)}`).join('<br>')}</div>` : ''}
+    ${(tk.history || []).map((h) => `<p style="font-size:.72rem;color:var(--muted);margin:10px 0 4px">${h.role} — ${h.agent}</p><pre>${esc(h.text)}</pre>`).join('')}`;
   taskDialog.showModal();
 }
 
@@ -1185,10 +1406,10 @@ function openTask(id) {
 async function loadRuns() {
   let j = { runs: [] };
   try { j = await (await fetch('/api/runs')).json(); } catch {}
-  if (!j.runs.length) { $('runsList').innerHTML = '(nema sačuvanih runova)'; return; }
+  if (!j.runs.length) { $('runsList').innerHTML = esc(t('(no saved runs)')); return; }
   $('runsList').innerHTML = j.runs.map((r) => `
     <div class="diritem" data-run="${escAttr(r.id)}" style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px">
-      ${r.stuck ? '⚠' : '✅'} ${r.done}/${r.total}${r.costUsd ? ` · ~$${r.costUsd.toFixed(2)}` : ''} · ${r.finishedAt ? new Date(r.finishedAt).toLocaleString('sr-RS') : ''}<br>
+      ${r.stuck ? '⚠' : '✅'} ${r.done}/${r.total}${r.costUsd ? ` · ~$${r.costUsd.toFixed(2)}` : ''} · ${r.finishedAt ? new Date(r.finishedAt).toLocaleString(localeTag()) : ''}<br>
       <span style="color:var(--muted)">${esc((r.goal || '').slice(0, 70))}</span>
     </div>`).join('');
 }
@@ -1199,8 +1420,8 @@ $('runsList').addEventListener('click', async (e) => {
   if (!r.ok) return;
   const j = await r.json();
   agentDialogId = null;
-  $('taskDialogBody').innerHTML = `<h2>📜 Run ${esc(new Date(j.finishedAt).toLocaleString('sr-RS'))}</h2>
-    <div class="hint">Cilj: ${esc(j.goal)}<br>Workspace: ${esc(j.workspacePath || '')}</div>
+  $('taskDialogBody').innerHTML = `<h2>📜 Run ${esc(new Date(j.finishedAt).toLocaleString(localeTag()))}</h2>
+    <div class="hint">${esc(t('Goal:'))} ${esc(j.goal)}<br>Workspace: ${esc(j.workspacePath || '')}</div>
     <pre>${esc(j.summary || '')}</pre>
     ${(j.tasks || []).map((t) => `<p style="font-size:.72rem;color:var(--muted);margin:8px 0 2px">#${t.id} [${t.status}] ${esc(t.title)}</p>`).join('')}`;
   taskDialog.showModal();
@@ -1215,7 +1436,7 @@ $('openWs').addEventListener('click', async () => {
 function addLogDom(evt) {
   const d = new Date(evt.ts);
   const el = document.createElement('div');
-  el.innerHTML = `<span class="t">${d.toLocaleTimeString('sr-RS')}</span><span class="a">${esc(evt.agent || '')}</span>${esc(evt.msg || '')}`;
+  el.innerHTML = `<span class="t">${d.toLocaleTimeString(localeTag())}</span><span class="a">${esc(evt.agent || '')}</span>${esc(evt.msg || '')}`;
   $('log').appendChild(el);
   $('log').scrollTop = $('log').scrollHeight;
 }
@@ -1241,16 +1462,16 @@ function workspaceBody() {
   const wsmode = document.querySelector('input[name=wsmode]:checked').value;
   if (wsmode === 'new') {
     const name = ($('wsNewName').value || '').trim().replace(/[^\w.\-À-ſ ]+/g, '-');
-    if (!newLoc) throw new Error('Izaberi lokaciju novog projekta (📁 Izaberi).');
-    if (!name) throw new Error('Unesi ime novog projekta.');
+    if (!newLoc) throw new Error(t('Choose a location for the new project (📁 Browse).'));
+    if (!name) throw new Error(t('Enter a name for the new project.'));
     return { workspacePath: newLoc + (newLoc.endsWith(sep) ? '' : sep) + name, gitUrl: '' };
   }
   if (wsmode === 'existing') {
-    if (!existLoc) throw new Error('Izaberi folder postojećeg projekta (📁 Izaberi).');
+    if (!existLoc) throw new Error(t('Choose the existing project folder (📁 Browse).'));
     return { workspacePath: existLoc, gitUrl: '' };
   }
   const git = ($('wsGit').value || '').trim();
-  if (!git) throw new Error('Unesi git clone URL.');
+  if (!git) throw new Error(t('Enter a git clone URL.'));
   return { workspacePath: '', gitUrl: git };
 }
 
@@ -1276,14 +1497,14 @@ $('planBtn').addEventListener('click', async () => {
     ...ws,
     notifyEmail: $('notifyEmail').value,
   };
-  if (!body.goal) return showBanner('Opiši zadatak (cilj) za tim.', true);
+  if (!body.goal) return showBanner(t('Describe the task (goal) for the team.'), true);
   $('banner').style.display = 'none';
   $('log').innerHTML = '';
   Notification?.requestPermission?.();
   const sid = activeSession;
   const r = await fetch('/api/plan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
   renderTabs();
@@ -1305,14 +1526,14 @@ $('soloBtn').addEventListener('click', async () => {
     ...ws,
     notifyEmail: $('notifyEmail').value,
   };
-  if (!body.instruction) return showBanner('Opiši u polju za cilj šta solo agent treba da uradi.', true);
+  if (!body.instruction) return showBanner(t('Describe in the goal field what the solo agent should do.'), true);
   $('banner').style.display = 'none';
   $('log').innerHTML = '';
   Notification?.requestPermission?.();
   const sid = activeSession;
   const r = await fetch('/api/quick', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
   renderTabs();
@@ -1320,7 +1541,7 @@ $('soloBtn').addEventListener('click', async () => {
 
 $('askBtn').addEventListener('click', async () => {
   const q = $('goal').value.trim();
-  if (!q) return showBanner('Upiši pitanje u polje za cilj — team lead će da odgovori.', true);
+  if (!q) return showBanner(t('Type a question in the goal field — the team lead will answer.'), true);
   let ws = {};
   if (!curWs()) {
     try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
@@ -1335,7 +1556,7 @@ $('askBtn').addEventListener('click', async () => {
   const sid = activeSession;
   const r = await fetch('/api/quick', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
   renderTabs();
@@ -1343,11 +1564,11 @@ $('askBtn').addEventListener('click', async () => {
 
 $('approveBtn').addEventListener('click', async () => {
   const tasks = (planDraft || []).filter((t) => t.title && t.title.trim());
-  if (!tasks.length) return showBanner('Plan nema nijedan task.', true);
+  if (!tasks.length) return showBanner(t('The plan has no tasks.'), true);
   const sid = activeSession;
   const r = await fetch('/api/approve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, tasks }) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
   renderTabs();
@@ -1355,11 +1576,11 @@ $('approveBtn').addEventListener('click', async () => {
 
 $('replanBtn').addEventListener('click', async () => {
   const feedback = $('planFeedback').value.trim();
-  if (!feedback) return showBanner('Upiši primedbe pa klikni „Ponovi planiranje".', true);
+  if (!feedback) return showBanner(t('Write your feedback, then click "Replan".'), true);
   const sid = activeSession;
   const r = await fetch('/api/replan', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: sid, feedback }) });
   const j = await r.json();
-  if (j.error) return showBanner('Greška: ' + j.error, true);
+  if (j.error) return showBanner(t('Error: {err}', { err: j.error }), true);
   $('planFeedback').value = '';
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
@@ -1369,24 +1590,43 @@ $('replanBtn').addEventListener('click', async () => {
 $('stopBtn').addEventListener('click', () => fetch('/api/stop', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId: activeSession }) }));
 
 $('testEmail').addEventListener('click', async () => {
-  if (!$('notifyEmail').value) return showBanner('Unesi email primaoca.', true);
+  if (!$('notifyEmail').value) return showBanner(t('Enter a recipient email.'), true);
   const r = await fetch('/api/test-email', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ to: $('notifyEmail').value }),
   });
   const j = await r.json();
-  showBanner(j.ok ? '📧 Test email poslat — proveri inbox.' : 'Email greška: ' + j.error, !j.ok);
+  showBanner(j.ok ? t('📧 Test email sent — check your inbox.') : t('Email error: {err}', { err: j.error }), !j.ok);
 });
 
-// ---------- Electron: podešavanja ključeva ----------
-// Link se prikazuje SAMO pod Electronom (kad postoji window.harness); u browseru ostaje skriven.
+// ---------- Electron: key settings ----------
+// The link is shown ONLY under Electron (when window.harness exists); it stays hidden in the browser.
 if (window.harness && typeof window.harness.openSetup === 'function') {
   const keysBtn = $('keysSettingsBtn');
   keysBtn.style.display = '';
   keysBtn.addEventListener('click', () => window.harness.openSetup());
 }
 
+// ---------- language picker ----------
+$('langSel').addEventListener('change', async () => {
+  const lang = $('langSel').value;
+  if (lang === curLang) return;
+  curLang = lang;
+  try {
+    await fetch('/api/lang', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ lang }) });
+  } catch { /* offline — apply locally anyway */ }
+  applyLang();
+});
+
 // ---------- init ----------
+// Initial language: GET /api/lang before the SSE 'hello' event lands (hello also carries lang).
+(async () => {
+  try {
+    const j = await (await fetch('/api/lang')).json();
+    if (j.lang === 'en' || j.lang === 'sr') curLang = j.lang;
+  } catch { /* keep English fallback */ }
+  applyLang();
+})();
 loadModels();
 loadRuns();
 loadResumable();

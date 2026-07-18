@@ -1,14 +1,14 @@
-// Electron preload — izlaže siguran, minimalan API glavnom i setup UI-ju.
-// Renderer nema pristup Node/ipcRenderer direktno; sve ide preko window.harness.
+// Electron preload — exposes a safe, minimal API to the main and setup UI.
+// The renderer has no direct access to Node/ipcRenderer; everything goes through window.harness.
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('harness', {
-  // Vraća { anthropicKey, kimiKey } za prefill polja pri otvaranju setup ekrana.
+  // Returns { anthropicKey, kimiKey } for prefilling the fields when the setup screen opens.
   getKeys: () => ipcRenderer.invoke('keys:get'),
 
-  // Čuva ključeve; main proces potom restartuje server i prebacuje prozor na glavni UI.
+  // Saves the keys; the main process then restarts the server and switches the window to the main UI.
   saveKeys: (keys) => ipcRenderer.invoke('keys:save', keys),
 
-  // Otvara setup (wizard) ekran iz glavnog UI-ja.
+  // Opens the setup (wizard) screen from the main UI.
   openSetup: () => ipcRenderer.send('setup:open'),
 });
