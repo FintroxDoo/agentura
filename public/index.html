@@ -88,6 +88,13 @@
   .log{background:#0c0e14;border:1px solid var(--border);border-radius:10px;height:260px;overflow-y:auto;padding:10px 12px;font-family:ui-monospace,Consolas,monospace;font-size:.74rem;line-height:1.55}
   .log .t{color:#525a70;margin-right:8px}
   .log .a{color:var(--accent);margin-right:6px;font-weight:600}
+  /* project file tree (left panel) */
+  .ftree{margin-top:8px;max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:8px;background:#0c0e14;padding:6px 4px;font-size:.76rem;line-height:1.7}
+  .ftree .fe{cursor:pointer;padding:0 6px;border-radius:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ftree .fe:hover{background:#161a26}
+  .ftree .fe.dir{color:var(--text);font-weight:500}
+  .ftree .fe.file{color:var(--muted)}
+  .ftree .kids{margin-left:14px;border-left:1px solid #1c2130}
   /* live agent work streams */
   .streams{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
   .streamEmpty{color:var(--muted);font-size:.82rem}
@@ -164,6 +171,16 @@
 <main>
   <!-- ===================== CONFIG ===================== -->
   <section class="panel" id="configPanel">
+    <!-- Projekat: sesija je trajno vezana za folder; fajl stablo ispod -->
+    <div id="projPanel" style="margin-bottom:14px">
+      <h2 style="display:flex;align-items:center;gap:8px">📁 Projekat
+        <button class="ghost" id="projRefresh" title="Osveži stablo" style="margin-left:auto;padding:3px 9px;display:none">↻</button>
+      </h2>
+      <div class="hint" id="projPath" style="word-break:break-all">(sesija još nije vezana za folder)</div>
+      <button class="ghost" id="projBind" style="width:100%;margin-top:8px">📁 Izaberi folder projekta</button>
+      <div id="fileTree" class="ftree" style="display:none"></div>
+    </div>
+
     <h2>Podešavanje tima</h2>
     <div class="counts">
       <div><label>Programeri</label><div class="stepper"><button data-t="programmers" data-d="-1">−</button><input id="programmers" value="2"><button data-t="programmers" data-d="1">+</button></div></div>
@@ -176,6 +193,8 @@
 Napravi TODO web aplikaciju: Node backend sa REST API-jem,
 frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
 
+    <!-- Radni prostor: vidljiv samo dok sesija NIJE vezana za folder -->
+    <div id="wsSection">
     <label>Radni prostor</label>
     <div class="radio-group">
       <label><input type="radio" name="wsmode" value="new" checked>Novi projekat</label>
@@ -193,21 +212,32 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
       <div class="pathbox"><div class="path" id="wsExistLoc">(nije izabran)</div><button class="ghost" id="wsExistBrowse">📁 Izaberi</button></div>
     </div>
     <div id="wsGitWrap" style="display:none"><label>Git clone URL</label><input type="text" id="wsGit" placeholder="https://github.com/korisnik/repo.git"></div>
+    </div>
 
-    <label>Motor</label>
+    <label>Motor <span style="color:#525a70">(brzi izbor za sve — ispod možeš da mešaš po ulozi)</span></label>
     <div class="radio-group">
-      <label><input type="radio" name="engine" value="api" checked>⚡ Claude API (ključ)</label>
-      <label id="engineCCLabel"><input type="radio" name="engine" value="claude-code">💳 Claude Code (pretplata)</label>
+      <label><input type="radio" name="engine" value="api" checked>⚡ Claude API</label>
+      <label id="engineCCLabel"><input type="radio" name="engine" value="claude-code">💳 Claude Code</label>
+      <label id="engineKimiLabel"><input type="radio" name="engine" value="kimi">🌙 Kimi</label>
     </div>
     <div class="hint" id="engineHint"></div>
 
-    <label>Modeli</label>
+    <label>Motor + model po ulozi <span style="color:#525a70">(mogu da se mešaju, npr. Claude lead + Kimi programeri)</span></label>
     <label style="margin-top:6px">Programeri</label>
-    <select id="modelProgrammer"><option>učitavam…</option></select>
+    <div class="row">
+      <select id="engProgrammer" class="engsel" style="flex:0 0 138px"></select>
+      <select id="modelProgrammer"><option>učitavam…</option></select>
+    </div>
     <label>Team Lead (plan + review)</label>
-    <select id="modelReviewer"><option>učitavam…</option></select>
+    <div class="row">
+      <select id="engReviewer" class="engsel" style="flex:0 0 138px"></select>
+      <select id="modelReviewer"><option>učitavam…</option></select>
+    </div>
     <label>QA</label>
-    <select id="modelQa"><option>učitavam…</option></select>
+    <div class="row">
+      <select id="engQa" class="engsel" style="flex:0 0 138px"></select>
+      <select id="modelQa"><option>učitavam…</option></select>
+    </div>
     <div class="mockbadge" id="mockBadge">⚠ MOCK mod — ANTHROPIC_API_KEY nije postavljen u .env na serveru. Tim se simulira bez pravih poziva.</div>
 
     <details>
@@ -227,6 +257,8 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
     </details>
 
     <button class="primary" id="planBtn">🧠 Team lead: napravi plan</button>
+    <button class="ghost" id="askBtn" style="width:100%;margin-top:8px">❓ Pitaj team lead-a (odgovor, bez taskova)</button>
+    <div class="hint">Isti input gore: „napravi plan" deli posao timu, a „pitaj" samo odgovara (kako se nešto koristi, gde je šta…) — čita kod po potrebi, ništa ne menja.</div>
 
     <details style="margin-top:10px">
       <summary>⚡ Solo agent (bez plana)</summary>
@@ -234,6 +266,7 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
       <select id="soloRole">
         <option value="programmer">👨‍💻 Programer — implementira zadatak</option>
         <option value="reviewer">🔍 Team lead — code review / analiza</option>
+        <option value="ask">❓ Team lead — odgovor na pitanje</option>
         <option value="qa">🧪 QA — testira projekat</option>
       </select>
       <div class="hint">Jedan agent, jedna epizoda — bez plana i review lanca. Koristi cilj/opis, radni prostor, motor i model te uloge iz podešavanja iznad. Programer radi direktno na main grani (izmene se komituju), team lead i QA daju izveštaj (+ email ako je unet).</div>
@@ -326,6 +359,7 @@ frontend u čistom HTML/JS, čuvanje u JSON fajlu, testovi."></textarea>
   <div class="row" style="margin-top:12px">
     <button class="ghost" id="dirUp">⬆ Nadfolder</button>
     <button class="ghost" id="dirHome">🏠 Home</button>
+    <button class="ghost" id="dirNewFolder">🆕 Novi folder</button>
     <button class="primary" id="dirChoose" style="margin-top:0">✓ Izaberi ovaj folder</button>
   </div>
   <button class="ghost" onclick="dirDialog.close()" style="margin-top:10px;width:100%">Otkaži</button>
@@ -373,27 +407,69 @@ const CC_MODELS = [
   { id: 'haiku', name: 'Haiku' },
 ];
 let apiModels = FALLBACK_MODELS;
+let kimiModels = [];
+let kimiAvailable = false;
 let apiMock = false;
 let apiKeyInvalid = false;
 let claudeCodeVer = null;
 
 function currentEngine() { return document.querySelector('input[name=engine]:checked').value; }
 
-function renderModelSelects() {
-  const cc = currentEngine() === 'claude-code';
-  const list = cc ? CC_MODELS : apiModels;
-  const pick = (substr) => (list.find((m) => m.id.includes(substr)) || list[0]).id;
-  for (const [selId, pref, ccDflt] of [['modelProgrammer','sonnet','sonnet'], ['modelReviewer','sonnet','sonnet'], ['modelQa','haiku','haiku']]) {
-    const sel = $(selId);
-    sel.innerHTML = list.map((m) => `<option value="${escAttr(m.id)}">${esc(m.name || m.id)}</option>`).join('');
-    sel.value = cc ? ccDflt : pick(pref);
+// Per-role engine + model (mixable: e.g. Claude team lead + Kimi programmers)
+const ENGINE_OPTS = [
+  { id: 'api', name: '⚡ Claude API' },
+  { id: 'claude-code', name: '💳 Claude Code' },
+  { id: 'kimi', name: '🌙 Kimi' },
+];
+const ROLE_SELS = [
+  { role: 'programmer', eng: 'engProgrammer', model: 'modelProgrammer', apiPref: 'sonnet', ccDflt: 'sonnet' },
+  { role: 'reviewer', eng: 'engReviewer', model: 'modelReviewer', apiPref: 'sonnet', ccDflt: 'sonnet' },
+  { role: 'qa', eng: 'engQa', model: 'modelQa', apiPref: 'haiku', ccDflt: 'haiku' },
+];
+function engineAvailable(id) {
+  return id === 'api' ? true : id === 'claude-code' ? !!claudeCodeVer : kimiAvailable;
+}
+function modelsForEngine(eng) {
+  return eng === 'claude-code' ? CC_MODELS
+    : eng === 'kimi' ? (kimiModels.length ? kimiModels : [{ id: 'kimi-for-coding', name: 'Kimi K2.7 Coding' }])
+    : apiModels;
+}
+function fillEngineSelects() {
+  for (const r of ROLE_SELS) {
+    const cur = $(r.eng).value;
+    $(r.eng).innerHTML = ENGINE_OPTS.map((e) =>
+      `<option value="${e.id}" ${engineAvailable(e.id) ? '' : 'disabled'}>${e.name}</option>`).join('');
+    if (cur && engineAvailable(cur)) $(r.eng).value = cur;
   }
-  $('mockBadge').style.display = !cc && apiMock ? 'block' : 'none';
-  $('engineHint').textContent = cc
-    ? 'Troši tokene iz tvoje claude.ai pretplate (Pro/Max) — ne API kredite. Pazi: paralelni programeri brzo troše 5-časovni limit plana.'
-    : apiKeyInvalid
-    ? '⚠ API ključ iz .env je NEVAŽEĆI (401) — API motor neće raditi. Generiši nov na console.anthropic.com ili koristi Claude Code motor.'
-    : (apiMock ? '' : 'Troši API kredite (pay-per-token) sa ključa iz .env.');
+}
+function renderRoleModels(r) {
+  const eng = $(r.eng).value;
+  const list = modelsForEngine(eng);
+  const sel = $(r.model);
+  sel.innerHTML = list.map((m) => `<option value="${escAttr(m.id)}">${esc(m.name || m.id)}</option>`).join('');
+  sel.value = eng === 'claude-code' ? r.ccDflt
+    : eng === 'kimi' ? (list.find((m) => m.id.includes('highspeed')) || list[0]).id
+    : (list.find((m) => m.id.includes(r.apiPref)) || list[0]).id;
+}
+function renderModelSelects() {
+  const eng = currentEngine();
+  // master radio sets all three role engines at once
+  for (const r of ROLE_SELS) {
+    if ($(r.eng).options.length === 0) fillEngineSelects();
+    $(r.eng).value = engineAvailable(eng) ? eng : 'api';
+    renderRoleModels(r);
+  }
+  renderEngineHint();
+}
+function renderEngineHint() {
+  const engs = ROLE_SELS.map((r) => $(r.eng).value);
+  const anyApi = engs.includes('api'), anyCC = engs.includes('claude-code'), anyKimi = engs.includes('kimi');
+  $('mockBadge').style.display = anyApi && apiMock ? 'block' : 'none';
+  const parts = [];
+  if (anyCC) parts.push('Claude Code troši claude.ai pretplatu (pazi na 5h limit)');
+  if (anyKimi) parts.push(kimiAvailable ? 'Kimi troši Kimi For Coding pretplatu' : '⚠ KIMI_API_KEY nije u .env');
+  if (anyApi) parts.push(apiKeyInvalid ? '⚠ Claude API ključ je NEVAŽEĆI (401)' : apiMock ? 'Claude API bez ključa = MOCK' : 'Claude API troši kredite (pay-per-token)');
+  $('engineHint').textContent = parts.join(' · ');
 }
 
 async function loadModels() {
@@ -403,19 +479,30 @@ async function loadModels() {
   apiMock = !!j.mock;
   apiKeyInvalid = !!j.apiKeyInvalid;
   claudeCodeVer = j.claudeCode;
+  kimiModels = j.kimi?.models || [];
+  kimiAvailable = !!j.kimi?.available;
   if (j.error) showBanner('Ne mogu da učitam listu modela: ' + j.error, true);
   if (!claudeCodeVer) {
     $('engineCCLabel').style.opacity = '.4';
     $('engineCCLabel').querySelector('input').disabled = true;
     $('engineCCLabel').title = 'Claude Code CLI nije pronađen na serveru';
   }
+  if (!kimiAvailable) {
+    $('engineKimiLabel').style.opacity = '.4';
+    $('engineKimiLabel').querySelector('input').disabled = true;
+    $('engineKimiLabel').title = 'KIMI_API_KEY nije postavljen u .env';
+  }
   // API engine unusable (no key / dead key) + Claude Code available → preselect it
   if ((apiMock || apiKeyInvalid) && claudeCodeVer) {
     document.querySelector('input[name=engine][value="claude-code"]').checked = true;
   }
+  fillEngineSelects();
   renderModelSelects();
 }
 document.querySelectorAll('input[name=engine]').forEach((r) => r.addEventListener('change', renderModelSelects));
+for (const r of ROLE_SELS) {
+  $(r.eng) && $(r.eng).addEventListener('change', () => { renderRoleModels(r); renderEngineHint(); });
+}
 
 // ---------- directory picker ----------
 let dirCur = '', dirTarget = null; // 'new' | 'existing'
@@ -440,17 +527,103 @@ $('dirUp').addEventListener('click', async () => {
   if (j.parent) loadDir(j.parent);
 });
 $('dirHome').addEventListener('click', () => loadDir(homeDir));
-$('dirChoose').addEventListener('click', () => {
+$('dirChoose').addEventListener('click', async () => {
   if (dirTarget === 'new') { newLoc = dirCur; $('wsNewLoc').textContent = dirCur; $('wsNewLoc').classList.add('set'); }
-  else { existLoc = dirCur; $('wsExistLoc').textContent = dirCur; $('wsExistLoc').classList.add('set'); }
+  else if (dirTarget === 'existing') { existLoc = dirCur; $('wsExistLoc').textContent = dirCur; $('wsExistLoc').classList.add('set'); }
+  else if (dirTarget === 'session') { dirDialog.close(); return createSessionForDir(dirCur); }
+  else if (dirTarget === 'bind') { dirDialog.close(); return bindCurrentSession(dirCur); }
   dirDialog.close();
+});
+// New folder inside the currently shown directory (for starting fresh projects)
+$('dirNewFolder').addEventListener('click', async () => {
+  const name = prompt('Ime novog foldera:');
+  if (!name || !name.trim()) return;
+  const p = dirCur + (dirCur.endsWith(sep) ? '' : sep) + name.trim();
+  if (dirTarget === 'session') { dirDialog.close(); return createSessionForDir(p, true); }
+  if (dirTarget === 'bind') { dirDialog.close(); return bindCurrentSession(p, true); }
+  // za new/existing pickere samo uđi u novi folder posle kreiranja kroz bind API nema smisla — preskoči
+  showBanner('Novi folder radi u režimu izbora projekta za sesiju.', true);
 });
 function openDirPicker(target) {
   dirTarget = target;
-  loadDir(target === 'new' ? (newLoc || homeDir) : (existLoc || homeDir)).then(() => dirDialog.showModal());
+  const start = target === 'new' ? (newLoc || homeDir) : target === 'existing' ? (existLoc || homeDir) : (homeDir || '');
+  loadDir(start).then(() => dirDialog.showModal());
 }
 $('wsNewBrowse').addEventListener('click', () => openDirPicker('new'));
 $('wsExistBrowse').addEventListener('click', () => openDirPicker('existing'));
+
+// ---------- session ↔ project directory binding ----------
+function curSession() { return sessionsList.find((s) => s.id === activeSession); }
+function curWs() { return curSession()?.workspacePath || ''; }
+
+async function createSessionForDir(ws, createDir = false) {
+  const r = await fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspacePath: ws, createDir }) });
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  if (!sessionsList.some((s) => s.id === j.id)) sessionsList.push({ id: j.id, name: j.name, workspacePath: j.workspacePath });
+  ensureS(j.id);
+  switchTab(j.id);
+}
+async function bindCurrentSession(ws, createDir = false) {
+  const r = await fetch(`/api/sessions/${encodeURIComponent(activeSession)}/workspace`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspacePath: ws, createDir }) });
+  const j = await r.json();
+  if (j.error) return showBanner(j.error, true);
+  const s = curSession();
+  if (s) { s.workspacePath = j.workspacePath; s.name = j.name || s.name; }
+  renderTabs(); renderProject();
+}
+
+// ---------- project file tree ----------
+async function fetchTree(rel) {
+  const r = await fetch(`/api/tree?session=${encodeURIComponent(activeSession)}&path=${encodeURIComponent(rel || '.')}`);
+  return r.json();
+}
+function treeEntryHtml(rel, name, isDir) {
+  const p = rel === '.' ? name : rel + '/' + name;
+  return `<div class="fe ${isDir ? 'dir' : 'file'}" data-p="${escAttr(p)}" data-d="${isDir ? 1 : 0}">${isDir ? '📁' : '📄'} ${esc(name)}</div>${isDir ? `<div class="kids" data-kids="${escAttr(p)}" style="display:none"></div>` : ''}`;
+}
+async function renderProject() {
+  const ws = curWs();
+  $('projPath').textContent = ws || '(sesija još nije vezana za folder)';
+  $('projBind').style.display = ws ? 'none' : '';
+  $('projRefresh').style.display = ws ? '' : 'none';
+  $('wsSection').style.display = ws ? 'none' : '';
+  $('fileTree').style.display = ws ? '' : 'none';
+  if (!ws) { $('fileTree').innerHTML = ''; return; }
+  const j = await fetchTree('.');
+  if (j.error) { $('fileTree').innerHTML = `<div class="fe file">${esc(j.error)}</div>`; return; }
+  $('fileTree').innerHTML =
+    j.dirs.map((d) => treeEntryHtml('.', d, true)).join('') +
+    j.files.map((f) => treeEntryHtml('.', f, false)).join('') || '<div class="fe file">(prazan folder)</div>';
+}
+$('projBind').addEventListener('click', () => openDirPicker('bind'));
+$('projRefresh').addEventListener('click', renderProject);
+$('fileTree').addEventListener('click', async (e) => {
+  const el = e.target.closest('.fe');
+  if (!el) return;
+  const p = el.dataset.p;
+  if (el.dataset.d === '1') {
+    const kids = document.querySelector(`[data-kids="${CSS.escape(p)}"]`);
+    if (!kids) return;
+    if (kids.style.display === 'none') {
+      kids.style.display = '';
+      if (!kids.innerHTML) {
+        const j = await fetchTree(p);
+        kids.innerHTML = j.error ? `<div class="fe file">${esc(j.error)}</div>` :
+          (j.dirs.map((d) => treeEntryHtml(p, d, true)).join('') +
+           j.files.map((f) => treeEntryHtml(p, f, false)).join('') || '<div class="fe file">(prazno)</div>');
+      }
+    } else kids.style.display = 'none';
+    return;
+  }
+  // file preview
+  const r = await fetch(`/api/file?session=${encodeURIComponent(activeSession)}&path=${encodeURIComponent(p)}`);
+  const j = await r.json();
+  agentDialogId = null;
+  const body = j.error ? esc(j.error) : j.binary ? '(binaran fajl)' : j.tooBig ? `(prevelik za pregled — ${Math.round(j.size / 1024)} KB)` : esc(j.content);
+  $('taskDialogBody').innerHTML = `<h2 style="font-size:.9rem;word-break:break-all">📄 ${esc(p)}</h2><pre style="max-height:65vh">${body}</pre>`;
+  taskDialog.showModal();
+});
 
 // ---------- sessions (project tabs) ----------
 let sessionsList = [];        // [{id, name}]
@@ -474,7 +647,7 @@ function renderTabs() {
   $('tabs').innerHTML = sessionsList.map((s) => {
     const p = S[s.id]?.state?.phase || 'idle';
     const cls = p === 'running' ? 'running' : (p === 'planning' || p === 'awaiting_approval') ? 'plan' : '';
-    return `<div class="tab ${cls} ${s.id === activeSession ? 'active' : ''}" onclick="switchTab('${s.id}')">
+    return `<div class="tab ${cls} ${s.id === activeSession ? 'active' : ''}" title="${escAttr(s.workspacePath || '(nije vezan folder)')}" onclick="switchTab('${s.id}')">
       <span class="tdot"></span>${esc(s.name)}
       ${sessionsList.length > 1 ? `<span class="x" title="Zatvori projekat" onclick="event.stopPropagation();closeTab('${s.id}')">✕</span>` : ''}
     </div>`;
@@ -522,16 +695,14 @@ function switchTab(id) {
   (S[id].logEvents || []).forEach(addLogDom);
   renderTabs();
   renderAll();
+  renderProject();
 }
 
-async function newTab() {
+// New tab = pick the project directory through the file browser first;
+// the session is permanently bound to it.
+function newTab() {
   saveForm(activeSession);
-  const r = await fetch('/api/sessions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-  const j = await r.json();
-  if (j.error) return showBanner(j.error, true);
-  if (!sessionsList.some((s) => s.id === j.id)) sessionsList.push({ id: j.id, name: j.name });
-  ensureS(j.id);
-  switchTab(j.id);
+  openDirPicker('session');
 }
 
 async function closeTab(id) {
@@ -547,7 +718,7 @@ es.onmessage = (m) => {
   const evt = JSON.parse(m.data);
 
   if (evt.type === 'hello') {
-    sessionsList = evt.sessions.map((s) => ({ id: s.id, name: s.name }));
+    sessionsList = evt.sessions.map((s) => ({ id: s.id, name: s.name, workspacePath: s.workspacePath || '' }));
     for (const s of evt.sessions) {
       const box = ensureS(s.id);
       box.state = s.state;
@@ -560,12 +731,20 @@ es.onmessage = (m) => {
     (S[activeSession].logEvents || []).forEach(addLogDom);
     renderTabs();
     renderAll();
+    renderProject();
     return;
   }
   if (evt.type === 'session_created') {
-    if (!sessionsList.some((s) => s.id === evt.session.id)) sessionsList.push({ id: evt.session.id, name: evt.session.name });
+    if (!sessionsList.some((s) => s.id === evt.session.id)) sessionsList.push({ id: evt.session.id, name: evt.session.name, workspacePath: evt.session.workspacePath || '' });
     ensureS(evt.session.id).state = evt.session.state;
     renderTabs();
+    return;
+  }
+  if (evt.type === 'session_updated') {
+    const it = sessionsList.find((s) => s.id === evt.session.id);
+    if (it) { it.name = evt.session.name; it.workspacePath = evt.session.workspacePath || ''; }
+    renderTabs();
+    if (evt.session.id === activeSession) renderProject();
     return;
   }
   if (evt.type === 'session_closed') {
@@ -633,6 +812,13 @@ es.onmessage = (m) => {
     const ok = evt.stuck === 0;
     if (active) {
       renderAll();
+      // ❓ pitanje → odmah prikaži odgovor team lead-a u dialogu
+      if (box.state.soloRole === 'ask') {
+        const ans = (box.state.tasks[0] && box.state.tasks[0].lastSummary) || evt.summary || '';
+        agentDialogId = null;
+        $('taskDialogBody').innerHTML = `<h2>❓ Odgovor team lead-a</h2><pre style="max-height:70vh;white-space:pre-wrap">${esc(ans)}</pre>`;
+        taskDialog.showModal();
+      }
       if (evt.usage) renderCost(evt.usage);
       $('openWs').style.display = '';
       showBanner(
@@ -665,6 +851,7 @@ function renderAll() {
   $('statusline').className = 'statusline' + (p === 'running' ? ' on' : p === 'planning' || p === 'awaiting_approval' ? ' plan' : '');
   $('planBtn').disabled = p === 'planning' || p === 'awaiting_approval' || p === 'running';
   $('soloBtn').disabled = $('planBtn').disabled;
+  $('askBtn').disabled = $('planBtn').disabled;
   $('stopBtn').style.display = p === 'planning' || p === 'awaiting_approval' || p === 'running' ? '' : 'none';
   $('planningPanel').style.display = p === 'planning' ? '' : 'none';
   $('openWs').style.display = p === 'finished' ? '' : 'none';
@@ -1067,13 +1254,16 @@ function workspaceBody() {
 }
 
 $('planBtn').addEventListener('click', async () => {
-  let ws;
-  try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  let ws = {};
+  if (!curWs()) {
+    try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  }
   const body = {
     sessionId: activeSession,
     programmers: $('programmers').value, reviewers: $('reviewers').value, qa: $('qa').value,
     goal: $('goal').value.trim(),
     engine: currentEngine(),
+    engines: { programmer: $('engProgrammer').value, reviewer: $('engReviewer').value, qa: $('engQa').value },
     finalQa: $('optFinalQa').checked,
     requireMergeApproval: $('optMergeApproval').checked,
     prMode: $('optPrMode').checked,
@@ -1099,16 +1289,18 @@ $('planBtn').addEventListener('click', async () => {
 });
 
 $('soloBtn').addEventListener('click', async () => {
-  let ws;
-  try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  let ws = {};
+  if (!curWs()) {
+    try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  }
   const role = $('soloRole').value;
-  const modelSel = { programmer: 'modelProgrammer', reviewer: 'modelReviewer', qa: 'modelQa' }[role];
+  const roleSel = ROLE_SELS.find((r) => r.role === (role === 'ask' ? 'reviewer' : role));
   const body = {
     sessionId: activeSession,
     role,
     instruction: $('goal').value.trim(),
-    engine: currentEngine(),
-    model: $(modelSel).value,
+    engine: $(roleSel.eng).value,
+    model: $(roleSel.model).value,
     ...ws,
     notifyEmail: $('notifyEmail').value,
   };
@@ -1116,6 +1308,29 @@ $('soloBtn').addEventListener('click', async () => {
   $('banner').style.display = 'none';
   $('log').innerHTML = '';
   Notification?.requestPermission?.();
+  const sid = activeSession;
+  const r = await fetch('/api/quick', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  if (j.error) return showBanner('Greška: ' + j.error, true);
+  S[sid].state = j.state;
+  if (sid === activeSession) { state = j.state; renderAll(); }
+  renderTabs();
+});
+
+$('askBtn').addEventListener('click', async () => {
+  const q = $('goal').value.trim();
+  if (!q) return showBanner('Upiši pitanje u polje za cilj — team lead će da odgovori.', true);
+  let ws = {};
+  if (!curWs()) {
+    try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
+  }
+  const body = {
+    sessionId: activeSession, role: 'ask', instruction: q,
+    engine: $('engReviewer').value, model: $('modelReviewer').value,
+    ...ws, notifyEmail: $('notifyEmail').value,
+  };
+  $('banner').style.display = 'none';
+  $('log').innerHTML = '';
   const sid = activeSession;
   const r = await fetch('/api/quick', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();

@@ -101,6 +101,17 @@ You will be given the user's request describing what to review or analyze. There
 - Reply in the same language as the user's request and end with a short conclusion (2-4 sentences).`;
 }
 
+export function soloAskPrompt(name) {
+  return `You are ${name}, the team lead of this project, answering a QUESTION from the human product owner.
+This is NOT a task to implement and NOT a code review — the user wants an explanation, guidance or information.
+
+- Explore the repository with your tools as much as needed to answer accurately (read files, check configs, run harmless read-only commands).
+- Answer in the same language as the question. Be concrete and practical: if the question is "how do I use X", give the exact steps/commands/file locations from THIS project, not generic advice.
+- Use short headings or numbered steps when it helps readability. Reference real file paths from the repo.
+- Do NOT modify, create or delete any files. Do NOT produce a task plan. No VERDICT line.
+- If something genuinely cannot be answered from the repo, say what is missing and where to look.`;
+}
+
 export function soloQaPrompt(name, harnessDir) {
   return `You are ${name}, a QA engineer doing a STANDALONE verification pass on a project.
 You will be given instructions describing what to test or verify. There is no specific change under review — test the project as it currently is.
@@ -112,7 +123,7 @@ You will be given instructions describing what to test or verify. There is no sp
   It prints JSON with console errors, uncaught exceptions and a screenshot path. JS errors on load = FAILED. If it reports playwright is not installed, note that and continue with other checks.
 - MOBILE / EXPO PROJECTS ("expo" in package.json): run mobile checks (use Node 18+, e.g. \`source ~/.nvm/nvm.sh && nvm use 20\`):
   node ${harnessDir}/server/mobile-smoke.mjs <path-to-expo-app-dir> --sim
-  It runs static checks (tsc/expo-doctor/bundle export), boots the iOS simulator, loads the app and reports Metro errors + a screenshot path — VIEW the screenshot with your Read tool. If maestro is available, you may write Maestro YAML flows (appId: host.exp.Exponent) to tap through what the user asked you to verify. Kill the reported metroPid when finished.
+  It runs static checks (tsc/expo-doctor/bundle export), boots the iOS simulator, loads the app and reports Metro errors + a screenshot path — VIEW the screenshot with your Read tool. If maestro is available, you may write Maestro YAML flows to tap through what the user asked you to verify (appId: host.exp.Exponent; first step MUST be \`openLink\` with the exp:// URL from the report hints, not launchApp). Kill the reported metroPid when finished.
 - Report precisely: what you ran, what worked, what fails and how to reproduce it.
 
 You MUST end your reply with exactly one verdict line, on its own line:
@@ -133,9 +144,10 @@ All individual tasks were implemented, reviewed and merged. Your job is to verif
 - WEB PROJECTS (an index.html exists): run a real browser smoke test:
   node ${harnessDir}/server/browser-smoke.mjs <path-to-index.html>
   JS errors on load = integration failure. If it reports playwright is not installed, note that and continue with other checks.
-- MOBILE / EXPO PROJECTS ("expo" in package.json): run the FULL mobile verification (use Node 18+, e.g. \`source ~/.nvm/nvm.sh && nvm use 20\`):
+- MOBILE / EXPO PROJECTS ("expo" in package.json): the FULL mobile verification is MANDATORY (use Node 18+, e.g. \`source ~/.nvm/nvm.sh && nvm use 20\`):
   node ${harnessDir}/server/mobile-smoke.mjs <path-to-expo-app-dir> --sim
-  It runs tsc/expo-doctor/bundle export, boots the iOS simulator, loads the app in Expo Go and prints a JSON report with Metro errors and a screenshot path. Metro errors or a failed bundle = integration failure. VIEW the screenshot with your Read tool to judge the rendered UI. The report leaves Metro running (metroPid): if the report says maestro is available, ALSO write Maestro YAML flows (appId: host.exp.Exponent) that exercise the acceptance checklist items — tap through the real UI with \`maestro test <flow.yml>\` and treat a failed flow as a failed criterion. When finished, kill the metroPid and shut down: \`xcrun simctl shutdown all\`. If the simulator is unavailable, note it and rely on the static checks.
+  If the static checks in the report fail, you may return FAILED immediately. But if they pass, you MUST NOT return PASSED without the simulator run: the app must actually boot in the simulator (report shows bundled:true) and you must LOOK at the screenshot. A PASSED verdict without the simulator step is invalid (only exception: the report itself says the simulator/xcrun is unavailable — note that explicitly in your reply).
+  It runs tsc/expo-doctor/bundle export, boots the iOS simulator, loads the app in Expo Go and prints a JSON report with Metro errors and a screenshot path. Metro errors or a failed bundle = integration failure. VIEW the screenshot with your Read tool to judge the rendered UI. The report leaves Metro running (metroPid): if the report says maestro is available, ALSO write Maestro YAML flows that exercise the acceptance checklist items — tap through the real UI with \`maestro test <flow.yml>\` and treat a failed flow as a failed criterion. IMPORTANT: appId is host.exp.Exponent and the FIRST step must be \`openLink\` with the exp:// URL from the report hints (NOT launchApp — that opens the Expo Go home screen). When finished, kill the metroPid and shut down: \`xcrun simctl shutdown all\`. If the simulator is unavailable, note it and rely on the static checks.
 - Be pragmatic: report only real breakage, not style.
 
 You MUST end your reply with exactly one verdict line, on its own line:

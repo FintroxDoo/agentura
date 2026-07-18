@@ -1,8 +1,14 @@
-// Agent loop implemented directly on the Claude Messages API (no SDK).
+// Agent loop implemented directly on the Anthropic Messages API format (no SDK).
+// Works against any Messages-compatible endpoint — Anthropic itself, or
+// Kimi For Coding (https://api.kimi.com/coding/v1/messages).
 import { TOOL_DEFS, createToolExecutor } from './tools.js';
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
-const MAX_ITERATIONS = 40;
+// Tool-loop cap. 40 proved too low in practice: Kimi reads files one by one and
+// a big task (e.g. writing a full OpenAPI spec) legitimately needs 60-100 tool
+// rounds — hitting the cap makes the agent submit EMPTY work and spin review
+// cycles. Prompt caching keeps the extra rounds cheap.
+const MAX_ITERATIONS = 120;
 
 /**
  * Run one agentic episode: system prompt + user message, tool-use loop
@@ -20,15 +26,30 @@ const MAX_ITERATIONS = 40;
  *   shell-made edits don't trigger a false nudge
  * @returns {Promise<{ text: string, changedFiles: string[], iterations: number, usage: object }>}
  */
-export async function runAgentEpisode({ apiKey, model, system, userMessage, workspace, onEvent = () => {}, requireChanges = false, hasChanges = null }) {
+// Appended to every system prompt on the API engine: teaches the model to use
+// the toolset efficiently (esp. models like Kimi that default to one small
+// read per turn — which burns the iteration budget).
+const TOOL_EFFICIENCY_NOTE =
+  '\n\nTool efficiency (important): you may call MULTIPLE independent tools in a SINGLE turn — batch your reads. ' +
+  'Use grep/glob to LOCATE code instead of reading files one by one. ' +
+  'Use edit_file for partial changes instead of rewriting whole files; use write_file with append=true to build large files in chunks.';
+
+export async function runAgentEpisode({ apiKey, model, system, userMessage, workspace, onEvent = () => {}, requireChanges = false, hasChanges = null, baseUrl = API_URL }) {
   const { execute, changedFiles } = createToolExecutor(workspace);
+  system = system + TOOL_EFFICIENCY_NOTE;
   const messages = [{ role: 'user', content: userMessage }];
   let finalText = '';
   let nudges = 0;
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, calls: 0 };
+  // Reasoning models (Kimi K2.x) return `thinking` blocks; replaying them in
+  // history is unnecessary and can be rejected — keep only text/tool_use.
+  const replayable = (content) => {
+    const kept = content.filter((b) => b.type === 'text' || b.type === 'tool_use');
+    return kept.length ? kept : [{ type: 'text', text: '(no output)' }]; // API rejects empty content
+  };
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
-    const resp = await callClaude({ apiKey, model, system, messages });
+    const resp = await callClaude({ apiKey, model, system, messages, baseUrl });
     if (resp.usage) {
       usage.input += resp.usage.input_tokens || 0;
       usage.output += resp.usage.output_tokens || 0;
@@ -52,7 +73,7 @@ export async function runAgentEpisode({ apiKey, model, system, userMessage, work
       if (requireChanges && !anyChanges && nudges < 2) {
         nudges += 1;
         onEvent({ type: 'nudge', attempt: nudges });
-        messages.push({ role: 'assistant', content: resp.content });
+        messages.push({ role: 'assistant', content: replayable(resp.content) });
         messages.push({
           role: 'user',
           content:
@@ -65,7 +86,7 @@ export async function runAgentEpisode({ apiKey, model, system, userMessage, work
       return { text: finalText, changedFiles: [...changedFiles], iterations: i + 1, usage };
     }
 
-    messages.push({ role: 'assistant', content: resp.content });
+    messages.push({ role: 'assistant', content: replayable(resp.content) });
 
     const results = [];
     for (const tu of toolUses) {
@@ -85,7 +106,7 @@ export async function runAgentEpisode({ apiKey, model, system, userMessage, work
   };
 }
 
-async function callClaude({ apiKey, model, system, messages }) {
+async function callClaude({ apiKey, model, system, messages, baseUrl }) {
   // Prompt caching: breakpoint on system (covers tools+system prefix) and on
   // the last block of the last message, so each loop iteration reuses the
   // previous iteration's cached conversation prefix (reads cost ~10%).
@@ -100,7 +121,9 @@ async function callClaude({ apiKey, model, system, messages }) {
 
   const body = {
     model,
-    max_tokens: 8192,
+    // 8192 chokes big single-file outputs (a full OpenAPI spec is 20k+ tokens).
+    // Models that cap lower reject with a max_tokens 400 — handled below.
+    max_tokens: 32_000,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages: msgs,
     tools: TOOL_DEFS,
@@ -109,7 +132,7 @@ async function callClaude({ apiKey, model, system, messages }) {
   // Retry on 429/5xx with backoff.
   let lastErr;
   for (let attempt = 0; attempt < 5; attempt++) {
-    const res = await fetch(API_URL, {
+    const res = await fetch(baseUrl || API_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -122,7 +145,13 @@ async function callClaude({ apiKey, model, system, messages }) {
     if (res.ok) return res.json();
 
     const errText = await res.text().catch(() => '');
-    lastErr = new Error(`Claude API ${res.status}: ${errText.slice(0, 500)}`);
+    const apiName = /kimi/i.test(baseUrl || '') ? 'Kimi API' : 'Claude API';
+    lastErr = new Error(`${apiName} ${res.status}: ${errText.slice(0, 500)}`);
+    // Older/smaller models cap max_tokens below 32k — drop to 8192 and retry once.
+    if (res.status === 400 && /max_tokens/i.test(errText) && body.max_tokens > 8192) {
+      body.max_tokens = 8192;
+      continue;
+    }
     if (res.status === 429 || res.status >= 500) {
       const retryAfter = Number(res.headers.get('retry-after')) || 2 ** attempt * 2;
       await new Promise((r) => setTimeout(r, retryAfter * 1000));

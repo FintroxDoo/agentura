@@ -6,7 +6,12 @@
 // surfaced live in the harness log, same as the raw-API engine.
 import { spawn, execFile } from 'node:child_process';
 
-const EPISODE_TIMEOUT_MS = 20 * 60_000;
+// A hard wall-clock kill murders perfectly healthy long episodes (deep mobile
+// E2E with simulator + Maestro legitimately runs 30+ min). Instead: kill only
+// after IDLE_MS without any CLI output (a genuinely stuck episode), with a
+// generous absolute backstop.
+const EPISODE_IDLE_MS = 10 * 60_000;      // no stream output for 10 min = stuck
+const EPISODE_HARD_CAP_MS = 90 * 60_000;  // absolute safety net
 const MAX_NUDGES = 2;
 
 const ENGINE_NOTE =
@@ -51,12 +56,24 @@ function runCliStream(args, cwd, onEvent) {
     let stderr = '';
     let result = null;
     const toolById = new Map(); // tool_use_id → tool name, to label tool_results
-    const timer = setTimeout(() => {
+
+    let idleTimer;
+    const bumpIdle = () => {
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        child.kill('SIGKILL');
+        reject(new Error(`Claude Code CLI: bez ikakvog izlaza ${EPISODE_IDLE_MS / 60000} min — epizoda zaglavljena, prekinuta`));
+      }, EPISODE_IDLE_MS);
+    };
+    bumpIdle();
+    const hardTimer = setTimeout(() => {
       child.kill('SIGKILL');
-      reject(new Error('Claude Code CLI: timeout (20 min)'));
-    }, EPISODE_TIMEOUT_MS);
+      reject(new Error(`Claude Code CLI: prekoračen apsolutni limit epizode (${EPISODE_HARD_CAP_MS / 60000} min)`));
+    }, EPISODE_HARD_CAP_MS);
+    const clearTimers = () => { clearTimeout(idleTimer); clearTimeout(hardTimer); };
 
     child.stdout.on('data', (d) => {
+      bumpIdle();
       buf += d;
       let nl;
       while ((nl = buf.indexOf('\n')) >= 0) {
@@ -87,10 +104,10 @@ function runCliStream(args, cwd, onEvent) {
         if (j.type === 'result') result = j;
       }
     });
-    child.stderr.on('data', (d) => { stderr += d; });
-    child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    child.stderr.on('data', (d) => { bumpIdle(); stderr += d; });
+    child.on('error', (err) => { clearTimers(); reject(err); });
     child.on('close', (code) => {
-      clearTimeout(timer);
+      clearTimers();
       if (!result) reject(new Error(`Claude Code CLI (exit ${code}): ${stderr.slice(0, 300) || 'nije vratio rezultat'}`));
       else resolve(result);
     });

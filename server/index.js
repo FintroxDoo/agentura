@@ -16,9 +16,17 @@ const claudeCodeVersion = checkClaudeCode(); // Promise<string|null>
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const SESS_FILE = path.join(__dirname, '..', 'data', 'sessions.json');
 const PORT = Number(process.env.PORT || 4400);
 
 const apiKey = () => (process.env.ANTHROPIC_API_KEY || '').trim();
+const kimiKey = () => (process.env.KIMI_API_KEY || '').trim();
+
+// Kimi For Coding: Anthropic-compatible endpoint, billed to the Kimi subscription.
+const KIMI_MODELS_FALLBACK = [
+  { id: 'kimi-for-coding', name: 'Kimi K2.7 Coding' },
+  { id: 'kimi-for-coding-highspeed', name: 'Kimi K2.7 Highspeed' },
+];
 
 const sseClients = new Set();
 function broadcast(evt) {
@@ -27,28 +35,75 @@ function broadcast(evt) {
 }
 
 // ---- Sessions: one Orchestrator per project tab, all can run in parallel.
-const sessions = new Map(); // id -> { id, name, orch }
+// Every session is permanently BOUND to a project directory (workspacePath) —
+// picked once via the file browser; persisted so tabs survive server restarts.
+const sessions = new Map(); // id -> { id, name, workspacePath, orch }
 let sessionSeq = 0;
-function createSession(name) {
-  const id = 's' + (++sessionSeq);
+
+function addSession(id, name, workspacePath = '') {
   const orch = new Orchestrator((evt) => broadcast({ ...evt, sessionId: id }));
-  const s = { id, name: (name || '').trim() || `Projekat ${sessionSeq}`, orch };
+  const s = {
+    id,
+    name: (name || '').trim() || (workspacePath ? path.basename(workspacePath) : `Projekat ${id.slice(1)}`),
+    workspacePath: workspacePath || '',
+    orch,
+  };
   sessions.set(id, s);
   return s;
 }
-createSession('Projekat 1');
+function createSession(name, workspacePath = '') {
+  const s = addSession('s' + (++sessionSeq), name, workspacePath);
+  saveSessions();
+  return s;
+}
+async function saveSessions() {
+  try {
+    await fs.mkdir(path.dirname(SESS_FILE), { recursive: true });
+    await fs.writeFile(SESS_FILE, JSON.stringify(
+      [...sessions.values()].map(({ id, name, workspacePath }) => ({ id, name, workspacePath })), null, 1));
+  } catch { /* non-fatal */ }
+}
+// Restore tabs + directory bindings from the last server run.
+try {
+  const stored = JSON.parse(await fs.readFile(SESS_FILE, 'utf8'));
+  for (const s of stored) {
+    if (!/^s\d+$/.test(s.id)) continue;
+    sessionSeq = Math.max(sessionSeq, Number(s.id.slice(1)));
+    addSession(s.id, s.name, s.workspacePath);
+  }
+} catch { /* first boot */ }
+if (!sessions.size) createSession('Projekat 1');
 
-function getOrch(url, body = {}) {
+function getSession(url, body = {}) {
   const id = body.sessionId || url.searchParams.get('session') || 's1';
   const s = sessions.get(id);
   if (!s) { const e = new Error(`Nepoznata sesija: ${id}`); e.statusCode = 404; throw e; }
-  return s.orch;
+  return s;
+}
+function getOrch(url, body = {}) {
+  return getSession(url, body).orch;
 }
 
 function sessionSummaries() {
   return [...sessions.values()].map((s) => ({
-    id: s.id, name: s.name, phase: s.orch.phase, goal: s.orch.goal,
+    id: s.id, name: s.name, phase: s.orch.phase, goal: s.orch.goal, workspacePath: s.workspacePath,
   }));
+}
+
+// Bind a session to its project directory (once) and tell all UIs.
+async function bindSessionWorkspace(s, ws, { rename = true } = {}) {
+  s.workspacePath = ws;
+  if (rename && /^Projekat \d+$/.test(s.name)) s.name = path.basename(ws);
+  await saveSessions();
+  broadcast({ type: 'session_updated', session: { id: s.id, name: s.name, workspacePath: s.workspacePath } });
+}
+
+// Resolve a path inside the session workspace; rejects traversal outside it.
+function insideWorkspace(s, rel) {
+  const root = path.resolve(s.workspacePath || s.orch.config?.workspacePath || '');
+  if (!root || root === path.resolve('/')) return null;
+  const p = path.resolve(root, rel || '.');
+  return p === root || p.startsWith(root + path.sep) ? { root, p } : null;
 }
 
 const MIME = {
@@ -72,6 +127,23 @@ async function readBody(req) {
 function json(res, code, obj) {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify(obj));
+}
+
+// ---- Kimi model list (cached 10 min; fallback to known ids)
+let kimiCache = { at: 0, models: [] };
+async function listKimiModels() {
+  if (!kimiKey()) return KIMI_MODELS_FALLBACK;
+  if (Date.now() - kimiCache.at < 10 * 60_000 && kimiCache.models.length) return kimiCache.models;
+  try {
+    const res = await fetch('https://api.kimi.com/coding/v1/models', {
+      headers: { authorization: `Bearer ${kimiKey()}` },
+    });
+    if (!res.ok) return KIMI_MODELS_FALLBACK;
+    const data = await res.json();
+    const models = (data.data || []).map((m) => ({ id: m.id, name: m.display_name || m.id }));
+    if (models.length) kimiCache = { at: Date.now(), models };
+    return models.length ? models : KIMI_MODELS_FALLBACK;
+  } catch { return KIMI_MODELS_FALLBACK; }
 }
 
 // ---- Claude model list (cached 10 min)
@@ -103,7 +175,7 @@ const server = http.createServer(async (req, res) => {
       });
       const hello = {
         type: 'hello',
-        sessions: [...sessions.values()].map((s) => ({ id: s.id, name: s.name, state: s.orch.state() })),
+        sessions: [...sessions.values()].map((s) => ({ id: s.id, name: s.name, workspacePath: s.workspacePath, state: s.orch.state() })),
       };
       res.write(`data: ${JSON.stringify(hello)}\n\n`);
       sseClients.add(res);
@@ -117,9 +189,38 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/sessions' && req.method === 'POST') {
       const body = await readBody(req);
-      const s = createSession(body.name);
-      broadcast({ type: 'session_created', session: { id: s.id, name: s.name, state: s.orch.state() } });
-      return json(res, 200, { ok: true, id: s.id, name: s.name });
+      let ws = (body.workspacePath || '').trim();
+      if (ws) {
+        ws = path.resolve(ws);
+        if (body.createDir) await fs.mkdir(ws, { recursive: true });
+        try {
+          const st = await fs.stat(ws);
+          if (!st.isDirectory()) return json(res, 400, { error: 'Putanja nije folder' });
+        } catch { return json(res, 400, { error: `Folder ne postoji: ${ws}` }); }
+      }
+      const s = createSession(body.name, ws);
+      broadcast({ type: 'session_created', session: { id: s.id, name: s.name, workspacePath: s.workspacePath, state: s.orch.state() } });
+      return json(res, 200, { ok: true, id: s.id, name: s.name, workspacePath: s.workspacePath });
+    }
+    // Bind (or re-bind) an existing session to a project directory
+    if (/^\/api\/sessions\/[^/]+\/workspace$/.test(url.pathname) && req.method === 'POST') {
+      const id = url.pathname.split('/')[3];
+      const s = sessions.get(id);
+      if (!s) return json(res, 404, { error: 'Nepoznata sesija' });
+      if (s.orch.phase === 'running' || s.orch.phase === 'planning') {
+        return json(res, 400, { error: 'Sesija je aktivna — folder ne može da se menja usred rada' });
+      }
+      const body = await readBody(req);
+      let ws = (body.workspacePath || '').trim();
+      if (!ws) return json(res, 400, { error: 'Nedostaje workspacePath' });
+      ws = path.resolve(ws);
+      if (body.createDir) await fs.mkdir(ws, { recursive: true });
+      try {
+        const st = await fs.stat(ws);
+        if (!st.isDirectory()) return json(res, 400, { error: 'Putanja nije folder' });
+      } catch { return json(res, 400, { error: `Folder ne postoji: ${ws}` }); }
+      await bindSessionWorkspace(s, ws);
+      return json(res, 200, { ok: true, workspacePath: s.workspacePath, name: s.name });
     }
     if (url.pathname.startsWith('/api/sessions/') && req.method === 'DELETE') {
       const id = url.pathname.slice('/api/sessions/'.length);
@@ -130,8 +231,43 @@ const server = http.createServer(async (req, res) => {
         return json(res, 400, { error: 'Projekat je aktivan — prvo ga zaustavi (■)' });
       }
       sessions.delete(id);
+      await saveSessions();
       broadcast({ type: 'session_closed', sessionId: id });
       return json(res, 200, { ok: true });
+    }
+
+    // ---- File tree of the session's bound project (left panel in the UI)
+    if (url.pathname === '/api/tree' && req.method === 'GET') {
+      const s = getSession(url);
+      const loc = insideWorkspace(s, url.searchParams.get('path') || '.');
+      if (!loc) return json(res, 400, { error: 'Sesija nema vezan folder (ili je putanja van njega)' });
+      let entries;
+      try { entries = await fs.readdir(loc.p, { withFileTypes: true }); }
+      catch (err) { return json(res, 400, { error: `Ne mogu da otvorim: ${err.message}` }); }
+      const HIDE = new Set(['node_modules', '.git', '.DS_Store']);
+      const dirs = [], files = [];
+      for (const e of entries) {
+        if (HIDE.has(e.name) || e.name.startsWith('.hwt-')) continue;
+        if (e.isDirectory()) dirs.push(e.name);
+        else files.push(e.name);
+      }
+      dirs.sort((a, b) => a.localeCompare(b));
+      files.sort((a, b) => a.localeCompare(b));
+      return json(res, 200, { root: loc.root, rel: path.relative(loc.root, loc.p) || '.', dirs, files });
+    }
+
+    // ---- Read-only file preview (capped), only inside the session workspace
+    if (url.pathname === '/api/file' && req.method === 'GET') {
+      const s = getSession(url);
+      const loc = insideWorkspace(s, url.searchParams.get('path') || '');
+      if (!loc) return json(res, 400, { error: 'Putanja je van radnog foldera sesije' });
+      try {
+        const st = await fs.stat(loc.p);
+        if (st.size > 300_000) return json(res, 200, { path: loc.p, tooBig: true, size: st.size });
+        const buf = await fs.readFile(loc.p);
+        if (buf.subarray(0, 8000).includes(0)) return json(res, 200, { path: loc.p, binary: true, size: st.size });
+        return json(res, 200, { path: loc.p, size: st.size, content: buf.toString('utf8') });
+      } catch (err) { return json(res, 400, { error: err.message }); }
     }
 
     // ---- REST
@@ -139,15 +275,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, getOrch(url).state());
     }
 
-    // Available Claude models + engine availability
+    // Available Claude models + engine availability (+ Kimi)
     if (url.pathname === '/api/models' && req.method === 'GET') {
       const claudeCode = await claudeCodeVersion;
-      if (!apiKey()) return json(res, 200, { mock: true, models: [], claudeCode });
+      const kimi = { available: !!kimiKey(), models: await listKimiModels() };
+      if (!apiKey()) return json(res, 200, { mock: true, models: [], claudeCode, kimi });
       try {
-        return json(res, 200, { mock: false, models: await listModels(), claudeCode });
+        return json(res, 200, { mock: false, models: await listModels(), claudeCode, kimi });
       } catch (err) {
         const invalid = /401|authentication/i.test(err.message);
-        return json(res, 200, { mock: false, models: [], claudeCode, apiKeyInvalid: invalid, error: invalid ? null : err.message });
+        return json(res, 200, { mock: false, models: [], claudeCode, kimi, apiKeyInvalid: invalid, error: invalid ? null : err.message });
       }
     }
 
@@ -172,30 +309,46 @@ const server = http.createServer(async (req, res) => {
     // Step 1: team lead makes a task plan from the goal
     if (url.pathname === '/api/plan' && req.method === 'POST') {
       const body = await readBody(req);
-      const engine = body.engine === 'claude-code' ? 'claude-code' : 'api';
+      const ENG = (v) => (['claude-code', 'kimi', 'api'].includes(v) ? v : null);
+      const engine = ENG(body.engine) || 'api';
+      // Per-role engine mix (e.g. Claude team lead + Kimi programmers)
+      const engines = {
+        programmer: ENG(body.engines?.programmer) || engine,
+        reviewer: ENG(body.engines?.reviewer) || engine,
+        qa: ENG(body.engines?.qa) || engine,
+      };
+      if (Object.values(engines).includes('kimi') && !kimiKey()) return json(res, 400, { error: 'KIMI_API_KEY nije postavljen u .env' });
       // Claude Code accepts aliases (sonnet/opus/haiku) or empty = session default
-      const DFLT_MODEL = engine === 'claude-code' ? '' : 'claude-sonnet-4-5';
+      const DFLT = { 'claude-code': '', kimi: 'kimi-for-coding-highspeed', api: 'claude-sonnet-4-5' };
       const models = body.models || {};
-      const pick = (v) => String(v || DFLT_MODEL).trim();
+      const pick = (v, role) => String(v || DFLT[engines[role]]).trim();
+      const sess = getSession(url, body);
       const cfg = {
         programmers: clampInt(body.programmers, 1, 10, 2),
         reviewers: clampInt(body.reviewers, 1, 5, 1),
         qa: clampInt(body.qa, 1, 5, 1),
-        models: { programmer: pick(models.programmer), reviewer: pick(models.reviewer), qa: pick(models.qa) },
+        models: { programmer: pick(models.programmer, 'programmer'), reviewer: pick(models.reviewer, 'reviewer'), qa: pick(models.qa, 'qa') },
         engine,
+        engines,
         requireMergeApproval: !!body.requireMergeApproval,
         prMode: !!body.prMode,
         finalQa: body.finalQa !== false,
         apiKey: apiKey(),
-        workspacePath: (body.workspacePath || '').trim(),
-        gitUrl: (body.gitUrl || '').trim(),
+        kimiKey: kimiKey(),
+        // A bound session ALWAYS uses its own directory — no re-picking per run.
+        workspacePath: sess.workspacePath || (body.workspacePath || '').trim(),
+        gitUrl: sess.workspacePath ? '' : (body.gitUrl || '').trim(),
         notifyEmail: (body.notifyEmail || '').trim(),
       };
       const goal = (body.goal || '').trim();
       if (!goal) return json(res, 400, { error: 'Opiši zadatak (cilj) za tim.' });
 
-      const orch = getOrch(url, body);
+      const orch = sess.orch;
       await orch.plan(cfg, goal);
+      // First run of an unbound (legacy) session binds it to the resolved dir.
+      if (!sess.workspacePath && orch.config?.workspacePath) {
+        await bindSessionWorkspace(sess, orch.config.workspacePath);
+      }
       return json(res, 200, { ok: true, state: orch.state() });
     }
 
@@ -203,24 +356,31 @@ const server = http.createServer(async (req, res) => {
     // with one instruction — no plan, no pipeline.
     if (url.pathname === '/api/quick' && req.method === 'POST') {
       const body = await readBody(req);
-      const role = ['programmer', 'reviewer', 'qa'].includes(body.role) ? body.role : null;
-      if (!role) return json(res, 400, { error: 'Uloga mora biti programmer, reviewer ili qa.' });
+      const role = ['programmer', 'reviewer', 'qa', 'ask'].includes(body.role) ? body.role : null;
+      if (!role) return json(res, 400, { error: 'Uloga mora biti programmer, reviewer, qa ili ask.' });
       const instruction = (body.instruction || '').trim();
       if (!instruction) return json(res, 400, { error: 'Opiši šta agent treba da uradi.' });
-      const engine = body.engine === 'claude-code' ? 'claude-code' : 'api';
-      const model = String(body.model || (engine === 'claude-code' ? '' : 'claude-sonnet-4-5')).trim();
+      const engine = ['claude-code', 'kimi'].includes(body.engine) ? body.engine : 'api';
+      if (engine === 'kimi' && !kimiKey()) return json(res, 400, { error: 'KIMI_API_KEY nije postavljen u .env' });
+      const model = String(body.model || (engine === 'claude-code' ? '' : engine === 'kimi' ? 'kimi-for-coding-highspeed' : 'claude-sonnet-4-5')).trim();
+      const sess = getSession(url, body);
       const cfg = {
         programmers: 1, reviewers: 1, qa: 1,
         models: { programmer: model, reviewer: model, qa: model },
         engine,
+        engines: { programmer: engine, reviewer: engine, qa: engine },
         requireMergeApproval: false, prMode: false, finalQa: false,
         apiKey: apiKey(),
-        workspacePath: (body.workspacePath || '').trim(),
-        gitUrl: (body.gitUrl || '').trim(),
+        kimiKey: kimiKey(),
+        workspacePath: sess.workspacePath || (body.workspacePath || '').trim(),
+        gitUrl: sess.workspacePath ? '' : (body.gitUrl || '').trim(),
         notifyEmail: (body.notifyEmail || '').trim(),
       };
-      const orch = getOrch(url, body);
+      const orch = sess.orch;
       await orch.quickRun(cfg, role, instruction);
+      if (!sess.workspacePath && orch.config?.workspacePath) {
+        await bindSessionWorkspace(sess, orch.config.workspacePath);
+      }
       return json(res, 200, { ok: true, state: orch.state() });
     }
 
@@ -298,7 +458,7 @@ const server = http.createServer(async (req, res) => {
       }
       const orch = getOrch(url, body);
       try {
-        await orch.restore(snap, apiKey());
+        await orch.restore(snap, apiKey(), kimiKey());
         return json(res, 200, { ok: true, state: orch.state() });
       } catch (err) {
         return json(res, 400, { error: err.message });
@@ -453,5 +613,6 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  Agent Harness ▸ http://localhost:${PORT}  (bind: ${HOST})\n`);
   if (HOST !== '127.0.0.1') console.log('  ⚠ Server je dostupan van ove mašine — svako sa mreže može da izvršava komande!');
   console.log(apiKey() ? '  ANTHROPIC_API_KEY: postavljen ✓' : '  ANTHROPIC_API_KEY: nije postavljen → MOCK mod (dodaj ga u .env)');
+  console.log(kimiKey() ? '  KIMI_API_KEY: postavljen ✓ (Kimi motor dostupan)' : '  KIMI_API_KEY: nije postavljen (Kimi motor isključen)');
   console.log('  Email: Resend' + (process.env.RESEND_API_KEY ? ' (env ključ) ✓' : ' (nedostaje RESEND_API_KEY u .env)'));
 });

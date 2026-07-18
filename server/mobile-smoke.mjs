@@ -108,15 +108,22 @@ if (withSim) {
   } else {
     let udid = null;
     try {
-      const devices = Object.values(JSON.parse(simctl.out).devices).flat();
-      const booted = devices.find((d) => d.state === 'Booted');
-      const pick = booted
-        || devices.find((d) => /iPhone 1[5-9]/.test(d.name))
-        || devices.find((d) => /iPhone 14 Pro$/.test(d.name))
-        || devices.find((d) => /iPhone/.test(d.name));
+      const devices = Object.values(JSON.parse(simctl.out).devices).flat().filter((d) => /iPhone/.test(d.name));
+      // Prefer: already booted → has Expo Go installed → newest iPhone.
+      // (A fresh simulator without Expo Go forces the flaky --ios install path.)
+      let pick = devices.find((d) => d.state === 'Booted');
+      if (!pick) {
+        for (const d of devices) {
+          const apps = await run('xcrun', ['simctl', 'listapps', d.udid], { timeout: 20_000 });
+          if (apps.out.includes('host.exp.Exponent')) { pick = d; break; }
+        }
+      }
+      if (!pick) {
+        pick = devices.find((dv) => /iPhone 1[5-9]/.test(dv.name)) || devices[0];
+      }
       udid = pick?.udid || null;
       sim.device = pick?.name || null;
-      if (udid && !booted) await run('xcrun', ['simctl', 'boot', udid], { timeout: 120_000 });
+      if (udid && pick.state !== 'Booted') await run('xcrun', ['simctl', 'boot', udid], { timeout: 120_000 });
       if (udid) { sim.booted = true; sim.udid = udid; }
     } catch { sim.skipped = 'ne mogu da parsiram listu simulatora'; }
 
@@ -129,18 +136,23 @@ if (withSim) {
       const hasExpoGo = apps.out.includes('host.exp.Exponent');
       sim.expoGoInstalled = hasExpoGo;
 
-      const metroLog = [];
+      // Metro MUST log to a file, not to our pipes: this script exits while
+      // Metro keeps running — a later log write to a dead pipe (EPIPE) would
+      // kill Metro right when Maestro starts requesting bundles.
+      const metroLogPath = path.join(os.tmpdir(), `mobile-smoke-metro-${Date.now()}.log`);
+      const logFh = await fs.open(metroLogPath, 'w');
       const args = hasExpoGo
         ? ['expo', 'start', '--port', String(EXPO_PORT)]
         : ['expo', 'start', '--ios', '--port', String(EXPO_PORT)];
       const child = spawn('npx', args, {
         cwd: dir, detached: true,
+        stdio: ['ignore', logFh.fd, logFh.fd],
         env: { ...process.env, CI: '1', EXPO_NO_TELEMETRY: '1' },
       });
       sim.metroPid = child.pid;
-      child.stdout.on('data', (d) => metroLog.push(String(d)));
-      child.stderr.on('data', (d) => metroLog.push(String(d)));
+      sim.metroLog = metroLogPath;
       child.unref();
+      const readLog = () => fs.readFile(metroLogPath, 'utf8').catch(() => '');
 
       if (hasExpoGo) {
         // give Metro a moment to come up, then deep-link the app into Expo Go
@@ -152,7 +164,7 @@ if (withSim) {
       const deadline = Date.now() + 180_000;
       let bundled = false;
       while (Date.now() < deadline) {
-        const log = metroLog.join('');
+        const log = await readLog();
         if (/Bundled\s|iOS Bundled/.test(log)) { bundled = true; break; }
         if (/error: |Unable to resolve|Failed to|FATAL/i.test(log)) break;
         await new Promise((r) => setTimeout(r, 2000));
@@ -160,7 +172,8 @@ if (withSim) {
       // give the app a moment to render after bundling
       if (bundled) await new Promise((r) => setTimeout(r, 8000));
 
-      const log = metroLog.join('');
+      const log = await readLog();
+      await logFh.close().catch(() => {}); // child keeps its own copy of the fd
       sim.bundled = bundled;
       sim.metroErrors = [...new Set(
         log.split('\n').filter((l) => /error|exception|unable to resolve|failed|redbox/i.test(l)).map((l) => l.trim().slice(0, 250))
@@ -178,7 +191,8 @@ if (withSim) {
       if (sc.ok) sim.screenshot = shot;
 
       report.hints.push(
-        `Metro i simulator su OSTAVLJENI da rade (metroPid ${child.pid}, port ${EXPO_PORT}) — možeš da pokrećeš Maestro flow-ove (appId: host.exp.Exponent). Kad završiš: kill ${child.pid}`,
+        `Metro i simulator su OSTAVLJENI da rade (metroPid ${child.pid}, port ${EXPO_PORT}, log: ${metroLogPath}) — možeš da pokrećeš Maestro flow-ove. Kad završiš: kill ${child.pid}`,
+        `U Maestro flow-u NE koristi launchApp (otvara Expo Go početni ekran) — prvi korak mora biti: openLink: exp://127.0.0.1:${EXPO_PORT}  (appId: host.exp.Exponent). Ako se pojavi Expo Go onboarding, dodaj uslovni tapOn: "Continue".`,
         'Screenshot pogledaj svojim Read alatom da proceniš da li se ekran ispravno renderuje.'
       );
     }

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { runAgentEpisode } from './agent.js';
 import { runClaudeCodeEpisode } from './claude-code.js';
 import { runMockEpisode } from './mock.js';
-import { plannerPrompt, programmerPrompt, reviewerPrompt, qaPrompt, integrationQaPrompt, soloReviewerPrompt, soloQaPrompt } from './roles.js';
+import { plannerPrompt, programmerPrompt, reviewerPrompt, qaPrompt, integrationQaPrompt, soloReviewerPrompt, soloQaPrompt, soloAskPrompt } from './roles.js';
 import { runCommand } from './tools.js';
 import { sendEmail } from './mailer.js';
 
@@ -25,6 +25,7 @@ export const ACTIVE_DIR = path.join(__dirname, '..', 'data', 'active');
 const HARNESS_DIR = path.join(__dirname, '..');
 const NOTES_FILE = 'HARNESS-NOTES.md';
 
+const KIMI_URL = 'https://api.kimi.com/coding/v1/messages'; // Anthropic-compatible
 const MAX_REVIEW_CYCLES = 5; // safety valve per task
 const POLL_MS = 400;
 
@@ -85,6 +86,8 @@ export class Orchestrator {
     this.steerings = [];        // [{taskId|null, message, ts}] — live user directives
     this.pausedUntil = 0;       // plan rate-limit backoff
     this.integrationRounds = 0; // final integration QA passes
+    this.integrationStatus = null;   // null | 'passed' | 'failed' (last verdict)
+    this.integrationReport = null;
     this.soloRole = null;       // set for solo (single-agent) runs
     this.workersRunning = false;
     this._gitLock = Promise.resolve();
@@ -120,6 +123,7 @@ export class Orchestrator {
         qa: this.config.qa,
         models: this.config.models,
         engine: this.config.engine,
+        engines: this.config.engines || null,
         mock: this.config.engine === 'api' && !this.config.apiKey,
         workspacePath: this.config.workspacePath,
         notifyEmail: this.config.notifyEmail,
@@ -144,10 +148,21 @@ export class Orchestrator {
     return this.config?.engine === 'api' && !this.config?.apiKey;
   }
 
+  // Engines can be mixed per role (e.g. Claude team lead + Kimi programmers).
+  engineFor(role) {
+    return (this.config?.engines && this.config.engines[role]) || this.config?.engine || 'api';
+  }
+  roleIsMock(role) {
+    return this.engineFor(role) === 'api' && !this.config?.apiKey;
+  }
+
   engineLabel() {
-    if (this.isMock) return 'MOCK mod (bez API ključa)';
-    if (this.config.engine === 'claude-code') return 'Claude Code (pretplata)';
-    return 'Claude API';
+    const L = (e) => e === 'claude-code' ? 'Claude Code' : e === 'kimi' ? 'Kimi' : (this.config?.apiKey ? 'Claude API' : 'MOCK');
+    const e = { p: this.engineFor('programmer'), r: this.engineFor('reviewer'), q: this.engineFor('qa') };
+    if (e.p === e.r && e.r === e.q) {
+      return L(e.p) + (e.p === 'claude-code' || e.p === 'kimi' ? ' (pretplata)' : '');
+    }
+    return `mix — programeri: ${L(e.p)}, lead: ${L(e.r)}, QA: ${L(e.q)}`;
   }
 
   setPhase(phase) {
@@ -219,11 +234,15 @@ export class Orchestrator {
       };
       const model = this.config.models.reviewer;
       const runPlanEpisode = (msg, resumeSessionId) => {
-        if (this.isMock) {
+        if (this.roleIsMock('reviewer')) {
           return runMockEpisode({ role: 'planner', task: { id: 0, title: this.goal }, attempt: 1, workspace: this.config.workspacePath, onEvent });
         }
-        if (this.config.engine === 'claude-code') {
+        const planEngine = this.engineFor('reviewer');
+        if (planEngine === 'claude-code') {
           return runClaudeCodeEpisode({ model, system: plannerPrompt(name), userMessage: msg, workspace: this.config.workspacePath, onEvent, resumeSessionId });
+        }
+        if (planEngine === 'kimi') {
+          return runAgentEpisode({ apiKey: this.config.kimiKey, baseUrl: KIMI_URL, model, system: plannerPrompt(name), userMessage: msg, workspace: this.config.workspacePath, onEvent });
         }
         return runAgentEpisode({ apiKey: this.config.apiKey, model, system: plannerPrompt(name), userMessage: msg, workspace: this.config.workspacePath, onEvent });
       };
@@ -336,10 +355,12 @@ export class Orchestrator {
 
     await this.prepareWorkspace();
 
-    const names = { programmer: 'Programer-1', reviewer: 'TeamLead-1', qa: 'QA-1' };
-    const agent = { id: 1, name: names[role], role, status: 'idle', currentTaskId: null, usage: emptyUsage(), lastText: '' };
+    const names = { programmer: 'Programer-1', reviewer: 'TeamLead-1', qa: 'QA-1', ask: 'TeamLead-1' };
+    // 'ask' runs as the team lead (reviewer engine/model) but only ANSWERS.
+    const agentRole = role === 'ask' ? 'reviewer' : role;
+    const agent = { id: 1, name: names[role], role: agentRole, status: 'idle', currentTaskId: null, usage: emptyUsage(), lastText: '' };
     this.agents = [agent];
-    const statusFor = { programmer: 'coding', reviewer: 'in_review', qa: 'in_qa' };
+    const statusFor = { programmer: 'coding', reviewer: 'in_review', qa: 'in_qa', ask: 'in_review' };
     this.tasks = [{
       id: 1,
       title: instruction.slice(0, 90),
@@ -353,7 +374,7 @@ export class Orchestrator {
 
     this.phase = 'running';
     this.emit('run_started', { state: this.state() });
-    const roleLabel = { programmer: 'programer', reviewer: 'team lead (review/analiza)', qa: 'QA' }[role];
+    const roleLabel = { programmer: 'programer', reviewer: 'team lead (review/analiza)', qa: 'QA', ask: 'team lead (odgovor na pitanje)' }[role];
     this.logMsg('Orkestrator', `⚡ Solo run: ${roleLabel} — motor: ${this.engineLabel()}, workspace: ${config.workspacePath}`);
     this._runSolo(agent, this.tasks[0], role); // fires async; result arrives via SSE
   }
@@ -365,14 +386,16 @@ export class Orchestrator {
       const system =
         role === 'programmer' ? programmerPrompt(agent.name) :
         role === 'reviewer' ? soloReviewerPrompt(agent.name) :
+        role === 'ask' ? soloAskPrompt(agent.name) :
         soloQaPrompt(agent.name, HARNESS_DIR);
       let userMessage =
         role === 'programmer' ? `Task: ${this.goal}\n\nImplement this task in the workspace now.` :
         role === 'reviewer' ? `REVIEW/ANALYSIS REQUEST:\n${this.goal}\n\nInspect the repository and produce the review now.` :
+        role === 'ask' ? `QUESTION FROM THE PRODUCT OWNER:\n${this.goal}\n\nExplore the repository as needed and answer the question now.` :
         `QA REQUEST:\n${this.goal}\n\nVerify this in the project now. Remember to end with the VERDICT line.`;
       userMessage += await this.notesBlock();
 
-      const result = await this.episode({ agent, role, task, system, userMessage, attempt: 1, workspace: ws });
+      const result = await this.episode({ agent, role: agent.role, task, system, userMessage, attempt: 1, workspace: ws });
       task.history.push({ role, agent: agent.name, text: result.text, ts: Date.now() });
 
       let failed = false;
@@ -406,7 +429,7 @@ export class Orchestrator {
     this.finishedAt = Date.now();
     const mins = ((this.finishedAt - this.startedAt) / 60000).toFixed(1);
     const u = this.totalUsage;
-    const roleLabel = { programmer: 'programer', reviewer: 'team lead', qa: 'QA' }[role];
+    const roleLabel = { programmer: 'programer', reviewer: 'team lead', qa: 'QA', ask: 'team lead odgovor' }[role];
     const summary =
       `Agent Harness — solo ${roleLabel} završen za ${mins} min.${u.costUsd ? ` (~$${u.costUsd.toFixed(2)})` : ''}\n\n` +
       `Zahtev: ${this.goal}\n\nIZVEŠTAJ:\n${report}\n\nWorkspace: ${this.config.workspacePath}`;
@@ -686,6 +709,15 @@ export class Orchestrator {
   commitAndMerge(task) {
     this._gitLock = this._gitLock.then(async () => {
       const ws = this.config.workspacePath;
+      // A dirty MAIN workspace (e.g. an artifact regenerated by a QA episode)
+      // makes git refuse ANY merge touching that file ("local changes would be
+      // overwritten") — which used to masquerade as a merge conflict and bounce
+      // the task back to the programmer forever. Snapshot it first.
+      const dirty = (await runCommand(ws, 'git status --porcelain')).trim();
+      if (dirty && !dirty.startsWith('ERROR')) {
+        await runCommand(ws, 'git add -A && git -c user.email=harness@local -c user.name=harness commit -qm "mid-run workspace snapshot (pre-merge)"');
+        this.logMsg('Orkestrator', `📸 Zatečene nekomitovane izmene u glavnom folderu (${dirty.split('\n').length} fajlova) — snimljene pre merge-a.`);
+      }
       await runCommand(
         task.worktree,
         `git add -A && git -c user.email=harness@local -c user.name="Agent Harness" commit -qm ${JSON.stringify(`task #${task.id}: ${task.title}`)} || true`
@@ -871,15 +903,23 @@ export class Orchestrator {
     };
     let result;
     const model = this.config.models[role] || this.config.models.programmer;
+    const engine = this.engineFor(role);
     const gitHasChanges = async () => (await runCommand(ws, 'git status --porcelain')).trim().length > 0;
-    if (this.isMock) {
+    if (this.roleIsMock(role)) {
       result = await runMockEpisode({ role, task, attempt, workspace: ws, onEvent });
-    } else if (this.config.engine === 'claude-code') {
+    } else if (engine === 'claude-code') {
       result = await runClaudeCodeEpisode({
         model, system, userMessage, workspace: ws, onEvent,
         requireChanges: role === 'programmer',
         hasChanges: role === 'programmer' ? gitHasChanges : null,
         resumeSessionId,
+      });
+    } else if (engine === 'kimi') {
+      result = await runAgentEpisode({
+        apiKey: this.config.kimiKey, baseUrl: KIMI_URL,
+        model, system, userMessage, workspace: ws, onEvent,
+        requireChanges: role === 'programmer',
+        hasChanges: role === 'programmer' ? gitHasChanges : null,
       });
     } else {
       result = await runAgentEpisode({
@@ -1114,12 +1154,15 @@ export class Orchestrator {
     if (this.phase !== 'running') return;
 
     // Final integration QA: individual tasks passed, but do the merged parts
-    // work TOGETHER? (Skipped in PR mode — main is not updated there.)
+    // work TOGETHER? Up to 2 fix rounds, plus one last VERIFY-ONLY round so the
+    // final fixes never land unchecked. (Skipped in PR mode — main not updated.)
     if (!this.stopping && this.config.finalQa !== false && !this.config.prMode &&
-        this.integrationRounds < 2 && this.tasks.some((t) => t.status === 'done')) {
+        this.integrationRounds < 3 && this.tasks.some((t) => t.status === 'done')) {
       this.integrationRounds += 1;
       const verdict = await this.runIntegrationQa();
-      if (!verdict.passed) {
+      this.integrationStatus = verdict.passed ? 'passed' : 'failed';
+      this.integrationReport = verdict.report;
+      if (!verdict.passed && this.integrationRounds < 3) {
         const id = Math.max(...this.tasks.map((t) => t.id)) + 1;
         this.tasks.push({
           id,
@@ -1137,6 +1180,9 @@ export class Orchestrator {
         this.resumeRun();
         return;
       }
+      if (!verdict.passed) {
+        this.logMsg('Orkestrator', '⚠ Integracioni QA je PAO i posle svih popravnih rundi — run se završava NEPOTVRĐEN. Pogledaj izveštaj u logu/emailu.');
+      }
     }
 
     this.finishedAt = Date.now();
@@ -1149,9 +1195,15 @@ export class Orchestrator {
     const summaryLines = this.tasks.map((t) =>
       `#${t.id} [${t.status.toUpperCase()}] ${t.title} — ${t.assignee || '—'}, review ciklusa: ${t.reviewCycles}, QA: ${t.qaCycles}${t.usage.costUsd ? `, ~$${t.usage.costUsd.toFixed(2)}` : ''}`
     );
+    const integLine =
+      this.integrationStatus === 'passed' ? '✅ Završni integracioni QA: PROŠAO\n' :
+      this.integrationStatus === 'failed'
+        ? `⚠ Završni integracioni QA: PAO i posle popravnih rundi — projekat NIJE potvrđen!\nIzveštaj:\n${(this.integrationReport || '').slice(0, 3000)}\n`
+        : '';
     const summary =
       `Agent Harness — run završen za ${mins} min.\n` +
       `Taskova završeno: ${done}/${this.tasks.length}${stuck.length ? `, zaglavljeno: ${stuck.length}` : ''}\n` +
+      integLine +
       (u.calls ? `Potrošnja: ${fmtTok(u.input + u.cacheRead + u.cacheWrite)} in / ${fmtTok(u.output)} out (${u.calls} poziva), ~$${u.costUsd.toFixed(2)}\n` : '') +
       '\n' + summaryLines.join('\n') +
       `\n\nWorkspace: ${this.config.workspacePath}`;
@@ -1167,7 +1219,9 @@ export class Orchestrator {
       try {
         await sendEmail({
           to: this.config.notifyEmail,
-          subject: stuck.length
+          subject: this.integrationStatus === 'failed'
+            ? `⚠ Agent Harness: ${done}/${this.tasks.length} završeno, ali integracioni QA PAO`
+            : stuck.length
             ? `⚠ Agent Harness: ${done}/${this.tasks.length} završeno, ${stuck.length} ZAGLAVLJENO`
             : `✅ Agent Harness: ${done}/${this.tasks.length} taskova završeno`,
           text: summary,
@@ -1227,7 +1281,7 @@ export class Orchestrator {
 
   async saveSnapshot() {
     if (!this.runId || this.phase !== 'running') return;
-    const { apiKey, ...cfg } = this.config || {};
+    const { apiKey, kimiKey, ...cfg } = this.config || {}; // keys never touch disk
     const snap = {
       v: 1,
       savedAt: Date.now(),
@@ -1237,6 +1291,7 @@ export class Orchestrator {
       startedAt: this.startedAt,
       mainBranch: this.mainBranch,
       integrationRounds: this.integrationRounds,
+      integrationStatus: this.integrationStatus,
       steerings: this.steerings,
       totalUsage: this.totalUsage,
       config: cfg,
@@ -1258,7 +1313,7 @@ export class Orchestrator {
   }
 
   // Rebuild a run from a snapshot after a server restart and start workers.
-  async restore(snap, apiKey) {
+  async restore(snap, apiKey, kimiKey = '') {
     if (this.phase === 'running' || this.phase === 'planning') {
       throw new Error('Ova sesija je zauzeta — otvori novi tab pa nastavi run u njemu');
     }
@@ -1267,12 +1322,13 @@ export class Orchestrator {
     }
 
     this.reset();
-    this.config = { ...snap.config, apiKey };
+    this.config = { ...snap.config, apiKey, kimiKey };
     this.goal = snap.goal;
     this.runId = snap.runId;
     this.startedAt = snap.startedAt || Date.now();
     this.mainBranch = snap.mainBranch || 'master';
     this.integrationRounds = snap.integrationRounds || 0;
+    this.integrationStatus = snap.integrationStatus || null;
     this.steerings = snap.steerings || [];
     this.totalUsage = { ...emptyUsage(), ...snap.totalUsage };
     this.log = snap.log || [];
