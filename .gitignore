@@ -5,3 +5,5 @@ workspace-*/
 .DS_Store
 *.DS_Store
 .hwt-*/
+dist/
+out/
