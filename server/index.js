@@ -16,7 +16,7 @@ const claudeCodeVersion = checkClaudeCode(); // Promise<string|null>
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
-const SESS_FILE = path.join(__dirname, '..', 'data', 'sessions.json');
+const SESS_FILE = path.join(process.env.HARNESS_DATA_DIR || path.join(__dirname, '..', 'data'), 'sessions.json');
 const PORT = Number(process.env.PORT || 4400);
 
 const apiKey = () => (process.env.ANTHROPIC_API_KEY || '').trim();
