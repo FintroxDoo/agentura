@@ -19,9 +19,9 @@ import { runCommand } from './tools.js';
 import { sendEmail } from './mailer.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const RUNS_DIR = path.join(__dirname, '..', 'data', 'runs');
+export const RUNS_DIR = path.join(process.env.HARNESS_DATA_DIR || path.join(__dirname, '..', 'data'), 'runs');
 // Live snapshot of every active run — enables resume after a server restart.
-export const ACTIVE_DIR = path.join(__dirname, '..', 'data', 'active');
+export const ACTIVE_DIR = path.join(process.env.HARNESS_DATA_DIR || path.join(__dirname, '..', 'data'), 'active');
 const HARNESS_DIR = path.join(__dirname, '..');
 const NOTES_FILE = 'HARNESS-NOTES.md';
 
