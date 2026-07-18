@@ -3,11 +3,17 @@
   "version": "1.0.0",
   "description": "Multi-agent dev team harness: programmer agents, team-lead review loop, QA agents, email notification. Zero dependencies.",
   "type": "module",
-  "main": "server/index.js",
+  "main": "electron/main.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "start:electron": "electron .",
+    "dist:mac": "electron-builder --mac dmg --arm64"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
   }
 }
