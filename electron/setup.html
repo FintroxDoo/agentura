@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Harness — Podešavanje ključeva</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --border:#2a2f3f;
+    --text:#e8eaf0; --muted:#8b91a5; --accent:#6c8cff; --accent2:#8b6cff;
+    --ok:#3ecf8e; --warn:#f5b14c; --err:#ff6b6b; --qa:#4cc9f0;
+    font-size:15px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:28px;
+    font-family:ui-sans-serif,system-ui,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text)}
+  .card{width:100%;max-width:520px;background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:26px 24px}
+  .head{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .logo{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;font-weight:800;font-size:16px;color:#fff}
+  h1{font-size:1.2rem;margin:0}
+  .sub{color:var(--muted);font-size:.82rem;margin-top:2px}
+  .intro{color:var(--muted);font-size:.85rem;line-height:1.55;margin:16px 0 4px}
+  label{display:block;font-size:.82rem;color:var(--text);margin:18px 0 4px;font-weight:600}
+  input[type=text],input[type=password]{
+    width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);
+    padding:10px 12px;font-size:.9rem;font-family:ui-monospace,Consolas,monospace}
+  input:focus{outline:none;border-color:var(--accent)}
+  .hint{font-size:.75rem;color:var(--muted);margin-top:6px;line-height:1.5}
+  .hint a{color:var(--accent);text-decoration:none}
+  .hint a:hover{text-decoration:underline}
+  button.primary{width:100%;margin-top:24px;padding:12px;border:none;border-radius:10px;font-weight:700;font-size:.98rem;cursor:pointer;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  button.primary:disabled{opacity:.45;cursor:not-allowed}
+  .status{display:none;align-items:center;gap:10px;margin-top:16px;color:var(--warn);font-size:.9rem}
+  .status.show{display:flex}
+  .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--warn);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .note{margin-top:18px;font-size:.72rem;color:var(--muted);line-height:1.5}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="head">
+    <div class="logo">AH</div>
+    <div>
+      <h1>Dobrodošli u Agent Harness</h1>
+      <div class="sub">Unesi API ključeve pre pokretanja tima</div>
+    </div>
+  </div>
+
+  <p class="intro">
+    Harness koristi ove ključeve da bi agenti (programeri, team lead, QA) mogli da
+    pozivaju modele. Dovoljno je uneti bar jedan — možeš uneti i oba i mešati motore po ulozi.
+  </p>
+
+  <label for="anthropicKey">Claude API key (ANTHROPIC_API_KEY)</label>
+  <input type="password" id="anthropicKey" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+  <div class="hint">
+    Ključ dobijaš na <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
+    → sekcija <b>API keys</b> → „Create Key". Troši Anthropic kredite (pay-per-token).
+  </div>
+
+  <label for="kimiKey">Kimi API key (KIMI_API_KEY)</label>
+  <input type="password" id="kimiKey" placeholder="sk-..." autocomplete="off" spellcheck="false">
+  <div class="hint">
+    Ključ dobijaš na <a href="https://platform.moonshot.ai" target="_blank" rel="noopener">platform.moonshot.ai</a>
+    (Moonshot / Kimi) uz <b>Kimi For Coding</b> pretplatu.
+  </div>
+
+  <button class="primary" id="continueBtn" disabled>Nastavi</button>
+
+  <div class="status" id="status"><span class="spinner"></span><span>Restartujem server…</span></div>
+
+  <div class="note">Ključevi se čuvaju lokalno na tvom računaru i koriste se samo za pozive modelima.</div>
+</div>
+
+<script>
+  const anthropicKey = document.getElementById('anthropicKey');
+  const kimiKey = document.getElementById('kimiKey');
+  const continueBtn = document.getElementById('continueBtn');
+  const status = document.getElementById('status');
+
+  // Dugme je omogućeno čim je bar jedno polje popunjeno (jedno je dovoljno, oba dozvoljena).
+  function refreshBtn() {
+    continueBtn.disabled = !(anthropicKey.value.trim() || kimiKey.value.trim());
+  }
+  anthropicKey.addEventListener('input', refreshBtn);
+  kimiKey.addEventListener('input', refreshBtn);
+
+  // Prefill ranije sačuvanim vrednostima (ako smo pod Electronom).
+  async function prefill() {
+    if (!window.harness || !window.harness.getKeys) return;
+    try {
+      const keys = await window.harness.getKeys();
+      if (keys && typeof keys === 'object') {
+        anthropicKey.value = keys.anthropicKey || '';
+        kimiKey.value = keys.kimiKey || '';
+      }
+    } catch (e) {
+      console.error('getKeys nije uspeo:', e);
+    }
+    refreshBtn();
+  }
+
+  continueBtn.addEventListener('click', async () => {
+    if (continueBtn.disabled) return;
+    continueBtn.disabled = true;
+    status.classList.add('show');
+    try {
+      if (window.harness && window.harness.saveKeys) {
+        await window.harness.saveKeys({
+          anthropicKey: anthropicKey.value.trim(),
+          kimiKey: kimiKey.value.trim(),
+        });
+      }
+      // Main proces sam restartuje server i prebacuje prozor na glavni UI.
+    } catch (e) {
+      console.error('saveKeys nije uspeo:', e);
+      status.classList.remove('show');
+      continueBtn.disabled = false;
+    }
+  });
+
+  prefill();
+</script>
+</body>
+</html>

@@ -164,6 +164,7 @@
     <div class="sub">AI dev tim — team lead plan · odobrenje · paralelni programeri · review · QA</div>
   </div>
   <div class="statusline" id="statusline"><span id="cost" style="color:var(--ok);font-weight:600"></span><span class="dot"></span><span id="statustext">neaktivan</span></div>
+  <button class="ghost" id="keysSettingsBtn" title="Podešavanja API ključeva" style="display:none;flex:none">🔑 Podešavanja ključeva</button>
 </header>
 
 <div class="tabs" id="tabs"></div>
@@ -1376,6 +1377,14 @@ $('testEmail').addEventListener('click', async () => {
   const j = await r.json();
   showBanner(j.ok ? '📧 Test email poslat — proveri inbox.' : 'Email greška: ' + j.error, !j.ok);
 });
+
+// ---------- Electron: podešavanja ključeva ----------
+// Link se prikazuje SAMO pod Electronom (kad postoji window.harness); u browseru ostaje skriven.
+if (window.harness && typeof window.harness.openSetup === 'function') {
+  const keysBtn = $('keysSettingsBtn');
+  keysBtn.style.display = '';
+  keysBtn.addEventListener('click', () => window.harness.openSetup());
+}
 
 // ---------- init ----------
 loadModels();
