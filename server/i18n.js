@@ -189,6 +189,10 @@ export const SR = {
   '💾 Run saved to history ({runId})': '💾 Run sačuvan u istoriju ({runId})',
   '💾 Saving history failed: {msg}': '💾 Snimanje istorije nije uspelo: {msg}',
   '🧩 Applying project skills ({role}): {names}': '🧩 Primenjujem projektne skillove ({role}): {names}',
+  '(older notes omitted — full history in HARNESS-NOTES.md)': '(starije beleške izostavljene — cela istorija u HARNESS-NOTES.md)',
+  '📏 Context: system {sys}k + task msg {msg}k chars': '📏 Kontekst: system {sys}k + poruka taska {msg}k karaktera',
+  '[diff truncated — {n} more changed file(s): {names}; inspect them with your tools]': '[diff skraćen — još {n} izmenjenih fajlova: {names}; pogledaj ih alatima]',
+  '[diff truncated — inspect the full diff with your tools]': '[diff skraćen — pogledaj ceo diff alatima]',
 
   // --- server/mock.js ---
   'project': 'projekat',

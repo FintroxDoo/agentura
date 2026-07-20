@@ -17,10 +17,14 @@ export const TOOL_DEFS = [
   },
   {
     name: 'read_file',
-    description: 'Read a text file relative to the workspace root.',
+    description: 'Read a text file relative to the workspace root. Optional offset (1-based start line) and limit (number of lines) return only that range, each line prefixed with its line number. For large files, grep to locate the code first, then read just the relevant range instead of the whole file.',
     input_schema: {
       type: 'object',
-      properties: { path: { type: 'string' } },
+      properties: {
+        path: { type: 'string' },
+        offset: { type: 'number', description: '1-based line number to start reading from (default 1)' },
+        limit: { type: 'number', description: 'Number of lines to read (default: to end of file)' },
+      },
       required: ['path'],
     },
   },
@@ -184,7 +188,17 @@ export function createToolExecutor(root) {
         case 'read_file': {
           const f = resolveSafe(root, input.path);
           const data = await fs.readFile(f, 'utf8');
-          return truncate(data);
+          if (input.offset == null && input.limit == null) return truncate(data);
+          // Ranged read: 1-based inclusive line window, lines numbered `N\t...`.
+          const lines = data.split('\n');
+          if (lines.length && lines[lines.length - 1] === '') lines.pop(); // trailing \n is not a line
+          const total = lines.length;
+          const from = Math.max(1, Math.floor(Number(input.offset ?? 1)) || 1);
+          if (from > total) return `ERROR: offset ${from} is beyond the end of ${input.path} — it has only ${total} lines`;
+          const lim = input.limit == null ? Infinity : Math.max(1, Math.floor(Number(input.limit)) || 1);
+          const to = Math.min(total, from + lim - 1);
+          const body = lines.slice(from - 1, to).map((l, k) => `${from + k}\t${l}`).join('\n');
+          return truncate(`[lines ${from}-${to} of ${total}]\n${body}`);
         }
         case 'write_file': {
           const f = resolveSafe(root, input.path);

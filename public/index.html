@@ -276,6 +276,7 @@ frontend in plain HTML/JS, storage in a JSON file, tests."></textarea>
       </select>
       <div class="hint" data-i18n>One agent, one episode — no plan or review chain. Uses the goal/description, workspace, engine and model of that role from the settings above. The programmer works directly on the main branch (changes are committed); the team lead and QA produce a report (+ email if provided).</div>
       <button class="ghost" id="soloBtn" style="width:100%;margin-top:8px" data-i18n>▶ Run solo agent</button>
+      <button class="ghost" id="consolidateBtn" style="width:100%;margin-top:8px" data-i18n>🧹 Consolidate notes</button>
     </details>
 
     <button class="ghost danger" id="stopBtn" style="width:100%;margin-top:8px;display:none" data-i18n>■ Stop</button>
@@ -427,6 +428,7 @@ const SR_UI = {
   '🧪 QA — tests the project': '🧪 QA — testira projekat',
   'One agent, one episode — no plan or review chain. Uses the goal/description, workspace, engine and model of that role from the settings above. The programmer works directly on the main branch (changes are committed); the team lead and QA produce a report (+ email if provided).': 'Jedan agent, jedna epizoda — bez plana i review lanca. Koristi cilj/opis, radni prostor, motor i model te uloge iz podešavanja iznad. Programer radi direktno na main grani (izmene se komituju), team lead i QA daju izveštaj (+ email ako je unet).',
   '▶ Run solo agent': '▶ Pokreni solo agenta',
+  '🧹 Consolidate notes': '🧹 Sredi beleške',
   '■ Stop': '■ Zaustavi',
   '📜 Run history': '📜 Istorija runova',
   '(no saved runs)': '(nema sačuvanih runova)',
@@ -1073,6 +1075,7 @@ function renderAll() {
   $('statusline').className = 'statusline' + (p === 'running' ? ' on' : p === 'planning' || p === 'awaiting_approval' ? ' plan' : '');
   $('planBtn').disabled = p === 'planning' || p === 'awaiting_approval' || p === 'running';
   $('soloBtn').disabled = $('planBtn').disabled;
+  $('consolidateBtn').disabled = $('planBtn').disabled;
   $('askBtn').disabled = $('planBtn').disabled;
   $('stopBtn').style.display = p === 'planning' || p === 'awaiting_approval' || p === 'running' ? '' : 'none';
   $('planningPanel').style.display = p === 'planning' ? '' : 'none';
@@ -1510,7 +1513,7 @@ $('planBtn').addEventListener('click', async () => {
   renderTabs();
 });
 
-$('soloBtn').addEventListener('click', async () => {
+async function startSoloRun() {
   let ws = {};
   if (!curWs()) {
     try { ws = workspaceBody(); } catch (err) { return showBanner(err.message, true); }
@@ -1537,6 +1540,16 @@ $('soloBtn').addEventListener('click', async () => {
   S[sid].state = j.state;
   if (sid === activeSession) { state = j.state; renderAll(); }
   renderTabs();
+}
+$('soloBtn').addEventListener('click', startSoloRun);
+
+// Canned agent prompt for the notes-consolidation solo run. Deliberately English-only
+// and NOT in SR_UI — it is an instruction for the agent, not UI chrome.
+const CONSOLIDATE_NOTES_INSTRUCTION = 'Consolidate HARNESS-NOTES.md in the workspace root: merge duplicate bullets, delete entries that are stale (verify each against the current code before deleting), keep every still-true non-obvious lesson, and keep the file under 40 bullets. Do not touch any other file.';
+$('consolidateBtn').addEventListener('click', () => {
+  $('soloRole').value = 'programmer';
+  $('goal').value = CONSOLIDATE_NOTES_INSTRUCTION;
+  startSoloRun();
 });
 
 $('askBtn').addEventListener('click', async () => {

@@ -9,6 +9,8 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 // rounds — hitting the cap makes the agent submit EMPTY work and spin review
 // cycles. Prompt caching keeps the extra rounds cheap.
 const MAX_ITERATIONS = 120;
+// History-size trigger (JSON chars) for pruning old tool_result payloads.
+const PRUNE_AT = 240_000;
 
 /**
  * Run one agentic episode: system prompt + user message, tool-use loop
@@ -32,14 +34,41 @@ const MAX_ITERATIONS = 120;
 const TOOL_EFFICIENCY_NOTE =
   '\n\nTool efficiency (important): you may call MULTIPLE independent tools in a SINGLE turn — batch your reads. ' +
   'Use grep/glob to LOCATE code instead of reading files one by one. ' +
+  'For large files, locate the code with grep first, then read only the relevant range via read_file offset/limit instead of the whole file. ' +
   'Use edit_file for partial changes instead of rewriting whole files; use write_file with append=true to build large files in chunks.';
+
+/**
+ * Replace bulky tool_result payloads in all but the last `keepLast` tool-result
+ * messages with a short stub — the model can re-run the tool if it needs the
+ * output again. Pure: returns new structures, never mutates the input; leaves
+ * non-tool_result content (and small results) untouched.
+ */
+export function pruneHistory(messages, { keepLast = 10, minSize = 500 } = {}) {
+  const idxs = [];
+  messages.forEach((m, i) => {
+    if (m.role === 'user' && Array.isArray(m.content) && m.content.some((b) => b.type === 'tool_result')) idxs.push(i);
+  });
+  const prune = new Set(idxs.slice(0, Math.max(0, idxs.length - keepLast)));
+  return messages.map((m, i) => {
+    if (!prune.has(i)) return m;
+    return {
+      ...m,
+      content: m.content.map((b) =>
+        b.type === 'tool_result' && typeof b.content === 'string' && b.content.length > minSize
+          ? { ...b, content: `[pruned earlier tool output (${b.content.length} chars) — call the tool again if you need it]` }
+          : b
+      ),
+    };
+  });
+}
 
 export async function runAgentEpisode({ apiKey, model, system, userMessage, workspace, onEvent = () => {}, requireChanges = false, hasChanges = null, baseUrl = API_URL }) {
   const { execute, changedFiles } = createToolExecutor(workspace);
   system = system + TOOL_EFFICIENCY_NOTE;
-  const messages = [{ role: 'user', content: userMessage }];
+  let messages = [{ role: 'user', content: userMessage }];
   let finalText = '';
   let nudges = 0;
+  let pruneAt = PRUNE_AT;
   const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, calls: 0 };
   // Reasoning models (Kimi K2.x) return `thinking` blocks; replaying them in
   // history is unnecessary and can be rejected — keep only text/tool_use.
@@ -49,6 +78,16 @@ export async function runAgentEpisode({ apiKey, model, system, userMessage, work
   };
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
+    // Pruning rewrites the conversation prefix, which costs one prompt-cache
+    // miss on the next request — that is why it fires at coarse thresholds
+    // (every PRUNE_AT chars of growth) instead of on every iteration.
+    const size = messages.reduce((n, m) => n + JSON.stringify(m).length, 0);
+    if (size > pruneAt) {
+      messages = pruneHistory(messages);
+      const after = messages.reduce((n, m) => n + JSON.stringify(m).length, 0);
+      onEvent({ type: 'context_pruned', before: size, after });
+      pruneAt += PRUNE_AT;
+    }
     const resp = await callClaude({ apiKey, model, system, messages, baseUrl });
     if (resp.usage) {
       usage.input += resp.usage.input_tokens || 0;

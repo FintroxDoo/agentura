@@ -20,6 +20,7 @@ function parseSkillFile(raw, dirName) {
   let name = dirName;
   let description = '';
   let roles = null;
+  let areas = null;
   let body = raw;
   const lines = raw.split('\n');
   if (/^---\s*$/.test(lines[0] ?? '')) {
@@ -41,17 +42,26 @@ function parseSkillFile(raw, dirName) {
             .filter((s) => VALID_ROLES.includes(s));
           roles = list.length ? list : null;
         }
+        else if (key === 'areas') {
+          // Free-form lowercase tags (e.g. `areas: ui, mobile`) — no fixed list.
+          const list = value
+            .replace(/^\[|\]$/g, '') // tolerate a YAML flow list
+            .split(',')
+            .map((s) => s.trim().toLowerCase())
+            .filter(Boolean);
+          areas = list.length ? list : null;
+        }
       }
       body = lines.slice(close + 1).join('\n');
     }
   }
-  return { name, description, roles, body: body.trim() };
+  return { name, description, roles, areas, body: body.trim() };
 }
 
 /**
  * Load all project skills from <workspace>/.claude/skills/<dir>/SKILL.md.
- * Returns [{ name, description, roles, body, path }] sorted alphabetically by
- * name. Missing skills dir → []; unreadable entries are skipped silently.
+ * Returns [{ name, description, roles, areas, body, path }] sorted alphabetically
+ * by name. Missing skills dir → []; unreadable entries are skipped silently.
  */
 export async function loadProjectSkills(workspace) {
   const skills = [];
@@ -69,18 +79,25 @@ export async function loadProjectSkills(workspace) {
 }
 
 /**
- * Build the prompt block of skills applicable to `role`.
+ * Build the prompt block of skills applicable to `role` (and, optionally, `area`).
  * Skills without explicit roles apply to programmer/reviewer/qa; skills with
  * explicit roles apply only to those (the planner must be listed explicitly).
+ * Area targeting: a skill is EXCLUDED only when the skill declares a non-empty
+ * `areas` list AND `area` is a non-null string AND area.toLowerCase() is not in
+ * that list. Skill without areas → always in; `area` null/omitted → everything
+ * in (backward compatible with 2-arg calls).
  * Returns { text, names } where names are the skills actually included.
  * Never throws.
  */
-export async function skillsBlock(workspace, role) {
+export async function skillsBlock(workspace, role, area = null) {
   try {
     const r = String(role ?? '').trim().toLowerCase();
-    const applicable = (await loadProjectSkills(workspace)).filter((s) =>
-      s.roles ? s.roles.includes(r) : DEFAULT_ROLES.includes(r),
-    );
+    const applicable = (await loadProjectSkills(workspace)).filter((s) => {
+      const roleOk = s.roles ? s.roles.includes(r) : DEFAULT_ROLES.includes(r);
+      if (!roleOk) return false;
+      if (Array.isArray(s.areas) && s.areas.length && typeof area === 'string' && !s.areas.includes(area.toLowerCase())) return false;
+      return true;
+    });
     if (!applicable.length) return { text: '', names: [] };
 
     let text = HEADER;

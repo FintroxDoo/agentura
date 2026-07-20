@@ -317,6 +317,7 @@ export class Orchestrator {
       size: ['S', 'M', 'L'].includes(t.size) ? t.size : 'M',
       dependsOn: normalizeDeps(t.dependsOn, i + 1, n),
       acceptance: normalizeAcceptance(t.acceptance),
+      area: normalizeArea(t.area),
       status: 'queued', // queued | coding | in_review | in_qa | awaiting_merge | needs_fix | done | stuck
       assignee: null,   // claimed at pickup
       assigneeId: null,
@@ -528,7 +529,18 @@ export class Orchestrator {
       const notes = await fs.readFile(path.join(this.config.workspacePath, NOTES_FILE), 'utf8');
       const body = notes.split('\n').slice(1).join('\n').trim();
       if (!body) return '';
-      return `\n\nPROJECT NOTES (lessons accumulated in previous runs — respect them):\n${notes.slice(0, 4000)}\n`;
+      // Cap what gets INJECTED into the prompt to the last 4k (newest lessons
+      // win) — the file on disk keeps the full history untouched.
+      let injected = notes;
+      if (notes.length > 4000) {
+        let tail = notes.slice(-4000);
+        if (notes[notes.length - 4001] !== '\n') {
+          const nl = tail.indexOf('\n');
+          if (nl !== -1) tail = tail.slice(nl + 1); // drop the partial first line
+        }
+        injected = t('(older notes omitted — full history in HARNESS-NOTES.md)') + '\n' + tail;
+      }
+      return `\n\nPROJECT NOTES (lessons accumulated in previous runs — respect them):\n${injected}\n`;
     } catch { return ''; }
   }
 
@@ -711,7 +723,7 @@ export class Orchestrator {
     let diff = await runCommand(task.worktree, 'git add -N -A 2>/dev/null; git diff HEAD');
     if (!diff.trim() || diff.startsWith('ERROR')) diff = '(diff unavailable — see file list)';
     const limit = limitOverride || task.diffLimit || 30_000; // shrunk after a context-overflow error
-    return diff.length > limit ? diff.slice(0, limit) + '\n...[diff truncated]' : diff;
+    return truncateDiff(diff, limit);
   }
 
   // QA passed → commit the worktree and merge the task branch into main.
@@ -890,8 +902,8 @@ export class Orchestrator {
   // (task worktrees fork from HEAD, so uncommitted .claude/skills would be
   // missing there). Logs once per episode when any skills apply. skillsBlock
   // never throws and returns { text: '', names: [] } when nothing applies.
-  async skillsFor(role) {
-    const sk = await skillsBlock(this.config.workspacePath, role);
+  async skillsFor(role, area = null) {
+    const sk = await skillsBlock(this.config.workspacePath, role, area);
     if (sk.names.length > 0) {
       this.logMsg(t('Orchestrator'), t('🧩 Applying project skills ({role}): {names}', { role, names: sk.names.join(', ') }));
     }
@@ -900,6 +912,13 @@ export class Orchestrator {
 
   async episode({ agent, role, task, system, userMessage, attempt, workspace, resumeSessionId = null }) {
     const ws = workspace || this.config.workspacePath;
+    // Context meter — one line per real episode (mock skipped: keeps mock logs stable).
+    if (!this.roleIsMock(role)) {
+      this.logMsg(t('Orchestrator'), t('📏 Context: system {sys}k + task msg {msg}k chars', {
+        sys: (system.length / 1000).toFixed(1),
+        msg: (userMessage.length / 1000).toFixed(1),
+      }));
+    }
     const onEvent = (e) => {
       if (e.type === 'tool_call') {
         this.logMsg(agent.name, `🔧 ${e.tool} ${JSON.stringify(e.input).slice(0, 160)}`);
@@ -1012,7 +1031,7 @@ export class Orchestrator {
         userMessage += await this.notesBlock();
         userMessage += this.steeringBlockFor(task.id);
 
-        const sk = await this.skillsFor('programmer');
+        const sk = await this.skillsFor('programmer', task.area);
         const system = sk.text ? programmerPrompt(agent.name) + '\n\n' + sk.text : programmerPrompt(agent.name);
         const result = await this.episode({
           agent, role: 'programmer', task, attempt: task.attempts,
@@ -1066,7 +1085,7 @@ export class Orchestrator {
       const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}${acceptanceBlock(task, 'reviewer')}\n\nProgrammer (${task.assignee}) summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(none reported)'}${prevBlock}\n\nDiff:\n\`\`\`\n${diff}\n\`\`\`\n\nReview this change now. Remember to end with the VERDICT line.`;
 
       try {
-        const sk = await this.skillsFor('reviewer');
+        const sk = await this.skillsFor('reviewer', task.area);
         const system = sk.text ? reviewerPrompt(agent.name) + '\n\n' + sk.text : reviewerPrompt(agent.name);
         const result = await this.episode({
           agent, role: 'reviewer', task, attempt: task.reviewCycles,
@@ -1143,7 +1162,7 @@ export class Orchestrator {
       const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}${acceptanceBlock(task, 'qa')}\n\nImplemented and code-review-approved. Programmer summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(unknown)'}${prevQaBlock}\n\nVerify this change works. Remember to end with the VERDICT line.`;
 
       try {
-        const sk = await this.skillsFor('qa');
+        const sk = await this.skillsFor('qa', task.area);
         const system = sk.text ? qaPrompt(agent.name, HARNESS_DIR) + '\n\n' + sk.text : qaPrompt(agent.name, HARNESS_DIR);
         const result = await this.episode({
           agent, role: 'qa', task, attempt: task.qaCycles,
@@ -1456,6 +1475,30 @@ function activityFromTool(tool, input) {
   return { kind: 'tool', tool, text: JSON.stringify(inp).slice(0, 300) };
 }
 
+// Cap an embedded diff without splitting a file section in half: cut at the
+// last complete `diff --git` boundary that fits under the limit and name the
+// omitted files so the reviewer can inspect them with its tools. Falls back to
+// a hard cut when no file boundary can be parsed (or none fits at all).
+function truncateDiff(diff, limit) {
+  if (diff.length <= limit) return diff;
+  const heads = [...diff.matchAll(/^diff --git .* "?b\/(.+?)"?$/gm)]
+    .map((m) => ({ index: m.index, name: m[1] }));
+  const noteFor = (omitted) => omitted.length
+    ? t('[diff truncated — {n} more changed file(s): {names}; inspect them with your tools]', {
+        n: omitted.length, names: omitted.map((h) => h.name).join(', '),
+      })
+    : t('[diff truncated — inspect the full diff with your tools]');
+  for (let i = 0; i < heads.length; i++) {
+    const end = i + 1 < heads.length ? heads[i + 1].index : diff.length;
+    if (end <= limit) continue; // section i fits entirely — keep it
+    if (heads[i].index > 0 && heads[i].index <= limit) {
+      return diff.slice(0, heads[i].index) + noteFor(heads.slice(i));
+    }
+    break; // the very first section already overflows — fall through to the hard cut
+  }
+  return diff.slice(0, limit) + '\n' + noteFor(heads.filter((h) => h.index >= limit));
+}
+
 function normalizeDeps(deps, selfId, taskCount) {
   if (!Array.isArray(deps)) return [];
   return [...new Set(deps.map(Number))]
@@ -1520,8 +1563,16 @@ function tasksFromJson(jsonStr) {
       size: ['S', 'M', 'L'].includes(t.size) ? t.size : 'M',
       dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.map(Number).filter((d) => Number.isInteger(d) && d > 0) : [],
       acceptance: normalizeAcceptance(t.acceptance),
+      area: normalizeArea(t.area),
     }));
   return tasks.length ? tasks : null;
+}
+
+// Planner's optional per-task area tag ("ui", "backend", …) — one lowercase
+// word; skills with an `areas:` frontmatter only inject into matching tasks.
+function normalizeArea(a) {
+  const v = String(a || '').trim().toLowerCase().slice(0, 20);
+  return /^[a-z][a-z0-9-]*$/.test(v) ? v : null;
 }
 
 // Acceptance criteria: array of short non-empty strings (max 8 × 300 chars).

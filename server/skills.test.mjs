@@ -153,3 +153,60 @@ test('skillsBlock never throws on bad input', async () => {
   await fs.writeFile(filePath, 'x', 'utf8');
   assert.deepEqual(await skillsBlock(filePath, 'reviewer'), { text: '', names: [] });
 });
+
+// ---------- area targeting ----------
+
+test('parses areas frontmatter: lowercased, trimmed, empties dropped; free-form; absent → null', async () => {
+  const ws = await makeWorkspace({
+    a: fm('name: a\nareas: UI, Mobile', 'A'),
+    b: fm('name: b\nareas: [ui, backend]', 'B'), // YAML flow list tolerated
+    c: fm('name: c\nareas: ui, , ,', 'C'), // empties dropped
+    d: fm('name: d\nareas:', 'D'), // empty value → null
+    e: fm('name: e', 'E'), // absent → null
+    f: fm('name: f\nareas: some-custom-tag', 'F'), // free-form, no fixed list
+  });
+  const areasByName = Object.fromEntries((await loadProjectSkills(ws)).map((s) => [s.name, s.areas]));
+  assert.deepEqual(areasByName.a, ['ui', 'mobile']);
+  assert.deepEqual(areasByName.b, ['ui', 'backend']);
+  assert.deepEqual(areasByName.c, ['ui']);
+  assert.equal(areasByName.d, null);
+  assert.equal(areasByName.e, null);
+  assert.deepEqual(areasByName.f, ['some-custom-tag']);
+});
+
+test('area match: episode area in skill areas → included (case-insensitive)', async () => {
+  const ws = await makeWorkspace({ uiskill: fm('areas: ui, mobile', 'UI body') });
+  assert.deepEqual((await skillsBlock(ws, 'programmer', 'ui')).names, ['uiskill']);
+  assert.deepEqual((await skillsBlock(ws, 'programmer', 'Mobile')).names, ['uiskill']);
+});
+
+test('area no-match: excludes only area-tagged skills, untagged skills stay in', async () => {
+  const ws = await makeWorkspace({
+    uiskill: fm('areas: ui, mobile', 'UI body'),
+    anyskill: 'General body.',
+  });
+  const { text, names } = await skillsBlock(ws, 'programmer', 'backend');
+  assert.deepEqual(names, ['anyskill']);
+  assert.ok(!text.includes('### Skill: uiskill'));
+});
+
+test('null area: everything included regardless of skill areas', async () => {
+  const ws = await makeWorkspace({
+    uiskill: fm('areas: ui', 'UI body'),
+    anyskill: 'General body.',
+  });
+  assert.deepEqual((await skillsBlock(ws, 'qa', null)).names, ['anyskill', 'uiskill']);
+});
+
+test('null skill areas: episode area never excludes an untagged skill', async () => {
+  const ws = await makeWorkspace({ anyskill: fm('description: no areas here', 'Body') });
+  assert.deepEqual((await skillsBlock(ws, 'programmer', 'backend')).names, ['anyskill']);
+});
+
+test('2-arg skillsBlock call still works with area-tagged skills present', async () => {
+  const ws = await makeWorkspace({
+    uiskill: fm('areas: ui', 'UI body'),
+    anyskill: 'General body.',
+  });
+  assert.deepEqual((await skillsBlock(ws, 'programmer')).names, ['anyskill', 'uiskill']);
+});

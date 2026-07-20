@@ -11,6 +11,7 @@ Rules:
 - Each task needs a short one-line "title" and a concrete "description" (2-6 sentences) telling the programmer exactly what to build and where.
 - When one task genuinely requires another to be finished first (e.g. it calls a function or API the other task creates), declare it with "dependsOn": an array of task numbers (1-based positions in your list). Use dependencies ONLY when truly required and keep the graph shallow — every dependency reduces parallelism. Never create circular dependencies.
 - Estimate each task's size as "size": "S" (trivial, <10 min of focused work), "M" (typical), or "L" (large/complex).
+- Optionally add "area": one lowercase word categorizing the task ("ui", "backend", "mobile", "infra", "docs", or another single word) — set it when the category is clear and omit it when unsure.
 - For EVERY task also write "acceptance": 2-5 concrete, independently verifiable acceptance criteria. Write them from the USER/BEHAVIOR perspective ("the list loads and shows X", "invalid input shows an error message instead of crashing"), NOT implementation details ("function X exists"). The QA agent will test EXACTLY these items, and the reviewer will check the code covers them — so make them specific and testable. Include the important edge cases (empty state, invalid input) where relevant.
 - Write titles, descriptions and acceptance criteria in the same language as the project goal.
 - End your reply with the plan as a fenced JSON code block, exactly in this shape:
@@ -19,7 +20,7 @@ Rules:
 [
   { "title": "...", "description": "...", "size": "M",
     "acceptance": ["criterion 1", "criterion 2"] },
-  { "title": "...", "description": "...", "size": "L", "dependsOn": [1],
+  { "title": "...", "description": "...", "size": "L", "dependsOn": [1], "area": "backend",
     "acceptance": ["criterion 1", "criterion 2", "criterion 3"] }
 ]
 \`\`\`
