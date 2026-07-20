@@ -15,6 +15,7 @@ import { runAgentEpisode } from './agent.js';
 import { runClaudeCodeEpisode } from './claude-code.js';
 import { runMockEpisode } from './mock.js';
 import { plannerPrompt, programmerPrompt, reviewerPrompt, qaPrompt, integrationQaPrompt, soloReviewerPrompt, soloQaPrompt, soloAskPrompt } from './roles.js';
+import { skillsBlock } from './skills.js';
 import { runCommand } from './tools.js';
 import { sendEmail } from './mailer.js';
 import { t } from './i18n.js';
@@ -234,18 +235,20 @@ export class Orchestrator {
         if (e.type === 'tool_call') this.logMsg(name, `🔧 ${e.tool} ${JSON.stringify(e.input).slice(0, 160)}`);
       };
       const model = this.config.models.reviewer;
+      const sk = await this.skillsFor('planner');
+      const system = sk.text ? plannerPrompt(name) + '\n\n' + sk.text : plannerPrompt(name);
       const runPlanEpisode = (msg, resumeSessionId) => {
         if (this.roleIsMock('reviewer')) {
           return runMockEpisode({ role: 'planner', task: { id: 0, title: this.goal }, attempt: 1, workspace: this.config.workspacePath, onEvent });
         }
         const planEngine = this.engineFor('reviewer');
         if (planEngine === 'claude-code') {
-          return runClaudeCodeEpisode({ model, system: plannerPrompt(name), userMessage: msg, workspace: this.config.workspacePath, onEvent, resumeSessionId });
+          return runClaudeCodeEpisode({ model, system, userMessage: msg, workspace: this.config.workspacePath, onEvent, resumeSessionId });
         }
         if (planEngine === 'kimi') {
-          return runAgentEpisode({ apiKey: this.config.kimiKey, baseUrl: KIMI_URL, model, system: plannerPrompt(name), userMessage: msg, workspace: this.config.workspacePath, onEvent });
+          return runAgentEpisode({ apiKey: this.config.kimiKey, baseUrl: KIMI_URL, model, system, userMessage: msg, workspace: this.config.workspacePath, onEvent });
         }
-        return runAgentEpisode({ apiKey: this.config.apiKey, model, system: plannerPrompt(name), userMessage: msg, workspace: this.config.workspacePath, onEvent });
+        return runAgentEpisode({ apiKey: this.config.apiKey, model, system, userMessage: msg, workspace: this.config.workspacePath, onEvent });
       };
 
       // Planner sometimes ends in prose without the JSON block (common on
@@ -388,11 +391,15 @@ export class Orchestrator {
     const ws = this.config.workspacePath;
     this.setAgent(agent, 'working', task.id);
     try {
-      const system =
+      let system =
         role === 'programmer' ? programmerPrompt(agent.name) :
         role === 'reviewer' ? soloReviewerPrompt(agent.name) :
         role === 'ask' ? soloAskPrompt(agent.name) :
         soloQaPrompt(agent.name, HARNESS_DIR);
+      if (role !== 'ask') { // 'ask' only answers questions — project skills do not apply
+        const sk = await this.skillsFor(role);
+        if (sk.text) system += '\n\n' + sk.text;
+      }
       let userMessage =
         role === 'programmer' ? `Task: ${this.goal}\n\nImplement this task in the workspace now.` :
         role === 'reviewer' ? `REVIEW/ANALYSIS REQUEST:\n${this.goal}\n\nInspect the repository and produce the review now.` :
@@ -879,6 +886,18 @@ export class Orchestrator {
     });
   }
 
+  // Project skills block for a role — ALWAYS loaded from the MAIN workspace
+  // (task worktrees fork from HEAD, so uncommitted .claude/skills would be
+  // missing there). Logs once per episode when any skills apply. skillsBlock
+  // never throws and returns { text: '', names: [] } when nothing applies.
+  async skillsFor(role) {
+    const sk = await skillsBlock(this.config.workspacePath, role);
+    if (sk.names.length > 0) {
+      this.logMsg(t('Orchestrator'), t('🧩 Applying project skills ({role}): {names}', { role, names: sk.names.join(', ') }));
+    }
+    return sk;
+  }
+
   async episode({ agent, role, task, system, userMessage, attempt, workspace, resumeSessionId = null }) {
     const ws = workspace || this.config.workspacePath;
     const onEvent = (e) => {
@@ -993,9 +1012,11 @@ export class Orchestrator {
         userMessage += await this.notesBlock();
         userMessage += this.steeringBlockFor(task.id);
 
+        const sk = await this.skillsFor('programmer');
+        const system = sk.text ? programmerPrompt(agent.name) + '\n\n' + sk.text : programmerPrompt(agent.name);
         const result = await this.episode({
           agent, role: 'programmer', task, attempt: task.attempts,
-          system: programmerPrompt(agent.name), userMessage, workspace: task.worktree,
+          system, userMessage, workspace: task.worktree,
           resumeSessionId: task.resumeSessions?.programmer || null,
         });
         if (task.resumeSessions) delete task.resumeSessions.programmer;
@@ -1045,9 +1066,11 @@ export class Orchestrator {
       const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}${acceptanceBlock(task, 'reviewer')}\n\nProgrammer (${task.assignee}) summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(none reported)'}${prevBlock}\n\nDiff:\n\`\`\`\n${diff}\n\`\`\`\n\nReview this change now. Remember to end with the VERDICT line.`;
 
       try {
+        const sk = await this.skillsFor('reviewer');
+        const system = sk.text ? reviewerPrompt(agent.name) + '\n\n' + sk.text : reviewerPrompt(agent.name);
         const result = await this.episode({
           agent, role: 'reviewer', task, attempt: task.reviewCycles,
-          system: reviewerPrompt(agent.name), userMessage, workspace: task.worktree,
+          system, userMessage, workspace: task.worktree,
           resumeSessionId: task.resumeSessions?.reviewer || null,
         });
         if (task.resumeSessions) delete task.resumeSessions.reviewer;
@@ -1120,9 +1143,11 @@ export class Orchestrator {
       const userMessage = `Task #${task.id}: ${task.title}\n\n${task.description}${acceptanceBlock(task, 'qa')}\n\nImplemented and code-review-approved. Programmer summary:\n${task.lastSummary}\n\nChanged files: ${task.changedFiles.join(', ') || '(unknown)'}${prevQaBlock}\n\nVerify this change works. Remember to end with the VERDICT line.`;
 
       try {
+        const sk = await this.skillsFor('qa');
+        const system = sk.text ? qaPrompt(agent.name, HARNESS_DIR) + '\n\n' + sk.text : qaPrompt(agent.name, HARNESS_DIR);
         const result = await this.episode({
           agent, role: 'qa', task, attempt: task.qaCycles,
-          system: qaPrompt(agent.name, HARNESS_DIR), userMessage, workspace: task.worktree,
+          system, userMessage, workspace: task.worktree,
           resumeSessionId: task.resumeSessions?.qa || null,
         });
         if (task.resumeSessions) delete task.resumeSessions.qa;
@@ -1259,9 +1284,11 @@ export class Orchestrator {
         checklist +
         '\n\nVerify the whole project now. Remember to end with the VERDICT line.' +
         (await this.notesBlock());
+      const sk = await this.skillsFor('qa');
+      const system = sk.text ? integrationQaPrompt(agent.name, HARNESS_DIR) + '\n\n' + sk.text : integrationQaPrompt(agent.name, HARNESS_DIR);
       const result = await this.episode({
         agent, role: 'qa', task: { id: 0, title: t('Integration: {goal}', { goal: this.goal.slice(0, 60) }) }, attempt: this.integrationRounds,
-        system: integrationQaPrompt(agent.name, HARNESS_DIR), userMessage,
+        system, userMessage,
         workspace: this.config.workspacePath,
       });
       const passed = lastVerdict(result.text) === 'PASSED';

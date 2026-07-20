@@ -86,8 +86,46 @@ Model lists are fetched live from each provider and picked per role in the UI.
 - **Live steering** — send directives to the whole team or a single task mid-run.
 - **Cost tracking** — tokens and estimated cost per task, per agent and total (including prompt-caching savings); run history in `data/runs/`.
 - **Project memory** — agents read and append lessons to `HARNESS-NOTES.md` in the workspace.
+- **Project skills** — drop `SKILL.md` files into `.claude/skills/`; their content is injected into programmer/reviewer/QA episodes on every engine.
 - **Email notifications** — run finished / limit hit / tasks stuck, via [Resend](https://resend.com).
 - **Languages** — UI and agent-facing messages in **English** by default, **Serbian** available from the language picker.
+
+## Project skills
+
+Per-project instructions for the agents. A skill is a folder with a `SKILL.md` — the same format as Claude Code Agent Skills (YAML frontmatter, then a markdown body) — read from the session's bound directory:
+
+```
+<project>/.claude/skills/
+  tdd/
+    SKILL.md
+  api-conventions/
+    SKILL.md
+```
+
+A minimal `SKILL.md`:
+
+```markdown
+---
+name: tdd
+description: Red-green-refactor loop expected for every code change
+roles: programmer, qa        # optional
+---
+
+Write the failing test first, then the minimal implementation, then refactor.
+```
+
+`name` and `description` are required; `roles` is optional — without it a skill applies to programmers, the reviewer and QA. The planner only receives skills that explicitly set `roles: planner`.
+
+Matching skills are **injected in full into the system prompt** of each agent episode, and this works on **every engine** — Claude API, Claude Code subscription and Kimi. Native Claude Code skills are only passively listed to the model and rarely get used; injection guarantees the guidance is actually in the agent's context. The orchestrator logs `🧩 Applying project skills (…)` per episode.
+
+Caps: 5000 characters per skill, 15000 per episode; skills over the budget are named in the prompt but their content is not included.
+
+Community skill collections in this format work as drop-ins — installing one is a folder copy (respect the collection's license), e.g. from [mattpocock/skills](https://github.com/mattpocock/skills):
+
+```bash
+git clone https://github.com/mattpocock/skills /tmp/skills
+cp -r /tmp/skills/skills/engineering/tdd <project>/.claude/skills/tdd
+```
 
 ## Desktop app (Electron)
 

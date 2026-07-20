@@ -188,6 +188,7 @@ export const SR = {
   '⏯ Run restored from a snapshot ({runId}) — {n} tasks left to finish. Working copies and Claude Code sessions are preserved.': '⏯ Run obnovljen iz snimka ({runId}) — {n} taskova za dovršavanje. Radne kopije i Claude Code sesije su sačuvane.',
   '💾 Run saved to history ({runId})': '💾 Run sačuvan u istoriju ({runId})',
   '💾 Saving history failed: {msg}': '💾 Snimanje istorije nije uspelo: {msg}',
+  '🧩 Applying project skills ({role}): {names}': '🧩 Primenjujem projektne skillove ({role}): {names}',
 
   // --- server/mock.js ---
   'project': 'projekat',
