@@ -2,7 +2,8 @@
 //
 // Responsibilities:
 //   1. Find a free TCP port (net server on port 0 → read port → close).
-//   2. Load API keys from <userData>/keys.json ({"anthropicKey":"...","kimiKey":"...","resendKey":"..."}).
+//   2. Load API keys from <userData>/keys.json
+//      ({"anthropicKey":"...","claudeCodeToken":"...","kimiKey":"...","resendKey":"..."}).
 //   3. Spawn server/index.js as a child (process.execPath + ELECTRON_RUN_AS_NODE=1)
 //      with PORT=<free port> and HARNESS_DATA_DIR=<userData>, forwarding the whole
 //      existing process.env (so CLAUDE_CODE_OAUTH_TOKEN passes through untouched).
@@ -46,24 +47,26 @@ function keysPath() {
   return path.join(app.getPath('userData'), 'keys.json');
 }
 
-// Returns { anthropicKey, kimiKey, resendKey } — empty strings when absent. Never logs values.
+// Returns { anthropicKey, claudeCodeToken, kimiKey, resendKey } — empty strings when absent. Never logs values.
 function readKeys() {
   try {
     const raw = fs.readFileSync(keysPath(), 'utf8');
     const j = JSON.parse(raw) || {};
     return {
       anthropicKey: (j.anthropicKey || '').trim(),
+      claudeCodeToken: (j.claudeCodeToken || '').trim(),
       kimiKey: (j.kimiKey || '').trim(),
       resendKey: (j.resendKey || '').trim(),
     };
   } catch {
-    return { anthropicKey: '', kimiKey: '', resendKey: '' };
+    return { anthropicKey: '', claudeCodeToken: '', kimiKey: '', resendKey: '' };
   }
 }
 
-function writeKeys({ anthropicKey, kimiKey, resendKey }) {
+function writeKeys({ anthropicKey, claudeCodeToken, kimiKey, resendKey }) {
   const data = JSON.stringify({
     anthropicKey: (anthropicKey || '').trim(),
+    claudeCodeToken: (claudeCodeToken || '').trim(),
     kimiKey: (kimiKey || '').trim(),
     resendKey: (resendKey || '').trim(),
   });
@@ -74,12 +77,14 @@ function writeKeys({ anthropicKey, kimiKey, resendKey }) {
   try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
 }
 
-// True when at least one Anthropic/Kimi key is available from keys.json OR the env.
+// True when at least one model-access credential is available from keys.json
+// OR the env: Claude API key, Claude Code subscription token, or Kimi key.
 function hasAnyKey() {
   const keys = readKeys();
   const envAnthropic = (process.env.ANTHROPIC_API_KEY || '').trim();
+  const envCcToken = (process.env.CLAUDE_CODE_OAUTH_TOKEN || '').trim();
   const envKimi = (process.env.KIMI_API_KEY || '').trim();
-  return !!(keys.anthropicKey || keys.kimiKey || envAnthropic || envKimi);
+  return !!(keys.anthropicKey || keys.claudeCodeToken || keys.kimiKey || envAnthropic || envCcToken || envKimi);
 }
 
 // ---- (3) Spawn the server child with the proper env, wait until it listens.
@@ -97,6 +102,7 @@ async function startServer() {
   };
   // Only inject keys when non-empty; empty values must not clobber env-provided keys.
   if (keys.anthropicKey) env.ANTHROPIC_API_KEY = keys.anthropicKey;
+  if (keys.claudeCodeToken) env.CLAUDE_CODE_OAUTH_TOKEN = keys.claudeCodeToken;
   if (keys.kimiKey) env.KIMI_API_KEY = keys.kimiKey;
   if (keys.resendKey) env.RESEND_API_KEY = keys.resendKey;
 
@@ -167,8 +173,8 @@ function createWindow() {
 // ---- IPC handlers. Key values are never logged.
 ipcMain.handle('keys:get', () => readKeys());
 
-ipcMain.handle('keys:save', async (_e, { anthropicKey, kimiKey, resendKey } = {}) => {
-  writeKeys({ anthropicKey, kimiKey, resendKey });
+ipcMain.handle('keys:save', async (_e, { anthropicKey, claudeCodeToken, kimiKey, resendKey } = {}) => {
+  writeKeys({ anthropicKey, claudeCodeToken, kimiKey, resendKey });
   killServer();
   await startServer();
   loadMain();

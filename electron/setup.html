@@ -50,8 +50,10 @@
   </div>
 
   <p class="intro">
-    Agentura uses these keys so the agents (programmers, team lead, QA) can
-    call the models. Entering at least one is enough — you can also enter both and mix engines per role.
+    Agentura needs at least ONE of the first three credentials so the agents (programmers,
+    team lead, QA) can call the models — pick the one matching how you pay:
+    <b>Claude API key</b> (pay-per-token credits), <b>Claude Code token</b> (your claude.ai
+    Pro/Max subscription), or <b>Kimi key</b>. You can enter several and mix engines per role.
   </p>
 
   <label for="anthropicKey">Claude API key (ANTHROPIC_API_KEY)</label>
@@ -59,6 +61,14 @@
   <div class="hint">
     Get your key at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>
     → <b>API keys</b> section → "Create Key". Uses Anthropic credits (pay-per-token).
+  </div>
+
+  <label for="claudeCodeToken">Claude Code token — claude.ai subscription (CLAUDE_CODE_OAUTH_TOKEN)</label>
+  <input type="password" id="claudeCodeToken" placeholder="sk-ant-oat01-..." autocomplete="off" spellcheck="false">
+  <div class="hint">
+    For paying with your <b>claude.ai Pro/Max subscription</b> instead of API credits.
+    Requires the <a href="https://claude.com/claude-code" target="_blank" rel="noopener">Claude Code CLI</a>
+    installed; run <code>claude setup-token</code> in a terminal, approve in the browser, and paste the token here.
   </div>
 
   <label for="kimiKey">Kimi API key (KIMI_API_KEY)</label>
@@ -85,16 +95,19 @@
 
 <script>
   const anthropicKey = document.getElementById('anthropicKey');
+  const claudeCodeToken = document.getElementById('claudeCodeToken');
   const kimiKey = document.getElementById('kimiKey');
   const resendKey = document.getElementById('resendKey');
   const continueBtn = document.getElementById('continueBtn');
   const status = document.getElementById('status');
 
-  // The button is enabled as soon as at least one field is filled (one is enough, both allowed).
+  // Enabled once at least one MODEL credential is present (API key, Claude Code
+  // subscription token, or Kimi key) — Resend alone can't run agents.
   function refreshBtn() {
-    continueBtn.disabled = !(anthropicKey.value.trim() || kimiKey.value.trim());
+    continueBtn.disabled = !(anthropicKey.value.trim() || claudeCodeToken.value.trim() || kimiKey.value.trim());
   }
   anthropicKey.addEventListener('input', refreshBtn);
+  claudeCodeToken.addEventListener('input', refreshBtn);
   kimiKey.addEventListener('input', refreshBtn);
 
   // Prefill with previously saved values (when running under Electron).
@@ -104,6 +117,7 @@
       const keys = await window.harness.getKeys();
       if (keys && typeof keys === 'object') {
         anthropicKey.value = keys.anthropicKey || '';
+        claudeCodeToken.value = keys.claudeCodeToken || '';
         kimiKey.value = keys.kimiKey || '';
         resendKey.value = keys.resendKey || '';
       }
@@ -121,6 +135,7 @@
       if (window.harness && window.harness.saveKeys) {
         await window.harness.saveKeys({
           anthropicKey: anthropicKey.value.trim(),
+          claudeCodeToken: claudeCodeToken.value.trim(),
           kimiKey: kimiKey.value.trim(),
           resendKey: resendKey.value.trim(),
         });
