@@ -335,6 +335,8 @@ const server = http.createServer(async (req, res) => {
         requireMergeApproval: !!body.requireMergeApproval,
         prMode: !!body.prMode,
         finalQa: body.finalQa !== false,
+        branch: String(body.branch || '').trim(),
+        baseBranch: String(body.baseBranch || '').trim(),
         apiKey: apiKey(),
         kimiKey: kimiKey(),
         // A bound session ALWAYS uses its own directory — no re-picking per run.
@@ -372,6 +374,8 @@ const server = http.createServer(async (req, res) => {
         engine,
         engines: { programmer: engine, reviewer: engine, qa: engine },
         requireMergeApproval: false, prMode: false, finalQa: false,
+        branch: String(body.branch || '').trim(),
+        baseBranch: String(body.baseBranch || '').trim(),
         apiKey: apiKey(),
         kimiKey: kimiKey(),
         workspacePath: sess.workspacePath || (body.workspacePath || '').trim(),

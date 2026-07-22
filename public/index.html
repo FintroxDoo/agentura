@@ -251,6 +251,11 @@ frontend in plain HTML/JS, storage in a JSON file, tests."></textarea>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optMergeApproval" style="width:auto"><span data-i18n>Ask for my approval before merge</span></label>
       <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="optPrMode" style="width:auto"><span data-i18n>PR mode (git push + gh pr create)</span></label>
       <div class="hint" data-i18n>PR mode requires a git remote and the gh CLI; tasks are not merged locally so integration QA is skipped.</div>
+      <div class="row">
+        <div><label data-i18n>Work branch</label><input type="text" id="branchInput" data-i18n-ph placeholder="e.g. feature/agents (created if missing)"></div>
+        <div><label data-i18n>Base branch</label><input type="text" id="baseBranchInput" data-i18n-ph placeholder="fork from (default: current)"></div>
+      </div>
+      <div class="hint" data-i18n>Agentura works and merges ONLY on the work branch — master/staging are never touched.</div>
     </details>
 
     <details>
@@ -413,6 +418,11 @@ const SR_UI = {
   'Ask for my approval before merge': 'Traži moje odobrenje pre merge-a',
   'PR mode (git push + gh pr create)': 'PR režim (git push + gh pr create)',
   'PR mode requires a git remote and the gh CLI; tasks are not merged locally so integration QA is skipped.': 'PR režim zahteva git remote i gh CLI; taskovi se ne merge-uju lokalno pa se integracioni QA preskače.',
+  'Work branch': 'Radna grana',
+  'Base branch': 'Osnovna grana',
+  'e.g. feature/agents (created if missing)': 'npr. feature/agents (kreira se ako ne postoji)',
+  'fork from (default: current)': 'izdvaja se iz (podrazumevano: trenutna)',
+  'Agentura works and merges ONLY on the work branch — master/staging are never touched.': 'Agentura radi i merge-uje ISKLJUČIVO na radnoj grani — master/staging se nikad ne diraju.',
   'Email notification (Resend)': 'Email notifikacija (Resend)',
   'Send to': 'Pošalji na',
   'Send test email': 'Pošalji test email',
@@ -1492,6 +1502,8 @@ $('planBtn').addEventListener('click', async () => {
     finalQa: $('optFinalQa').checked,
     requireMergeApproval: $('optMergeApproval').checked,
     prMode: $('optPrMode').checked,
+    branch: $('branchInput').value.trim(),
+    baseBranch: $('baseBranchInput').value.trim(),
     models: {
       programmer: $('modelProgrammer').value,
       reviewer: $('modelReviewer').value,
@@ -1526,6 +1538,8 @@ async function startSoloRun() {
     instruction: $('goal').value.trim(),
     engine: $(roleSel.eng).value,
     model: $(roleSel.model).value,
+    branch: $('branchInput').value.trim(),
+    baseBranch: $('baseBranchInput').value.trim(),
     ...ws,
     notifyEmail: $('notifyEmail').value,
   };

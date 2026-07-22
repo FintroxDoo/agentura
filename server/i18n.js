@@ -193,6 +193,13 @@ export const SR = {
   '📏 Context: system {sys}k + task msg {msg}k chars': '📏 Kontekst: system {sys}k + poruka taska {msg}k karaktera',
   '[diff truncated — {n} more changed file(s): {names}; inspect them with your tools]': '[diff skraćen — još {n} izmenjenih fajlova: {names}; pogledaj ih alatima]',
   '[diff truncated — inspect the full diff with your tools]': '[diff skraćen — pogledaj ceo diff alatima]',
+  'Invalid branch name: {b}': 'Neispravno ime grane: {b}',
+  'Branch "{b}" is protected — Agentura never commits or merges into it; enter a different work branch.': 'Grana "{b}" je zaštićena — Agentura nikad ne komituje niti merge-uje u nju; unesi drugu radnu granu.',
+  'Base branch "{b}" does not exist': 'Osnovna grana "{b}" ne postoji',
+  'Could not switch to work branch "{b}": {out}': 'Ne mogu da se prebacim na radnu granu "{b}": {out}',
+  '🌿 Switched to existing work branch "{b}"': '🌿 Prebačeno na postojeću radnu granu "{b}"',
+  '🌿 Created work branch "{b}" from "{base}"': '🌿 Kreirana radna grana "{b}" iz "{base}"',
+  '🌿 Protected branch "{b}" — created work branch "{nb}" from it instead': '🌿 Zaštićena grana "{b}" — umesto nje kreirana radna grana "{nb}"',
 
   // --- server/mock.js ---
   'project': 'projekat',

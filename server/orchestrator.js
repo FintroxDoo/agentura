@@ -201,7 +201,12 @@ export class Orchestrator {
     this.runId = new Date().toISOString().replace(/[:.]/g, '-');
     this.setPhase('planning');
 
-    await this.prepareWorkspace();
+    try {
+      await this.prepareWorkspace();
+    } catch (err) {
+      this.setPhase('idle'); // workspace/branch errors must not wedge the session in 'planning'
+      throw err;
+    }
     this.logMsg(t('Orchestrator'), t('Workspace ready: {ws} (branch: {branch}) — engine: {engine}', { ws: config.workspacePath, branch: this.mainBranch, engine: this.engineLabel() }));
 
     // Planner runs async; result arrives via SSE (plan_ready / plan_failed).
@@ -362,7 +367,12 @@ export class Orchestrator {
     this.runId = new Date().toISOString().replace(/[:.]/g, '-');
     this.startedAt = Date.now();
 
-    await this.prepareWorkspace();
+    try {
+      await this.prepareWorkspace();
+    } catch (err) {
+      this.setPhase('idle'); // keep the session usable after a branch/workspace error
+      throw err;
+    }
 
     const names = { programmer: t('Programmer-{n}', { n: 1 }), reviewer: 'TeamLead-1', qa: 'QA-1', ask: 'TeamLead-1' };
     // 'ask' runs as the team lead (reviewer engine/model) but only ANSWERS.
@@ -649,6 +659,10 @@ export class Orchestrator {
       await runCommand(ws, 'git init -q && git add -A && git -c user.email=harness@local -c user.name=harness commit -qm "baseline" --allow-empty');
     }
 
+    // Work-branch resolution runs BEFORE any harness commit (snapshot / notes
+    // init below), so nothing ever lands on a protected branch.
+    await this.resolveWorkBranch(ws);
+
     // Worktrees fork from HEAD — snapshot any uncommitted changes first so
     // programmers see the complete current state of the project.
     const dirty = (await runCommand(ws, 'git status --porcelain')).trim();
@@ -671,18 +685,81 @@ export class Orchestrator {
     }
     await runCommand(ws, 'git add -A && git -c user.email=harness@local -c user.name=harness commit -qm "harness notes init" || true');
 
-    let branch = (await runCommand(ws, 'git rev-parse --abbrev-ref HEAD')).trim().split('\n')[0];
-    if (!branch || branch === 'HEAD' || branch.startsWith('ERROR')) {
-      await runCommand(ws, 'git checkout -qB harness-main');
-      branch = 'harness-main';
-    }
-    this.mainBranch = branch;
-
     // Clean up leftovers from previous runs
     const base = path.basename(ws);
     await runCommand(ws, 'git worktree prune');
     await runCommand(path.dirname(ws), `rm -rf ".hwt-${base}-t"* ; true`);
     await runCommand(ws, `git worktree prune; git branch --list 'harness/task-*' --format='%(refname:short)' | while read b; do git branch -D "$b"; done; true`);
+  }
+
+  // Decide which branch this run works and merges on. config.branch = work
+  // branch (created from config.baseBranch — or HEAD — when missing);
+  // protected branches (master/staging by default, HARNESS_PROTECTED_BRANCHES
+  // to override) are NEVER worked on: an explicit request errors, a workspace
+  // found on one gets an auto-created agentura/run-* branch instead.
+  async resolveWorkBranch(ws) {
+    const PROTECTED = new Set(
+      (process.env.HARNESS_PROTECTED_BRANCHES || 'master,staging')
+        .split(',').map((s) => s.trim()).filter(Boolean)
+    );
+    const valid = (v) => {
+      const s = String(v || '').trim();
+      return /^[A-Za-z0-9][\w./-]{0,80}$/.test(s) && !s.includes('..') ? s : '';
+    };
+    for (const raw of [this.config.branch, this.config.baseBranch]) {
+      if (raw && String(raw).trim() && !valid(raw)) {
+        throw new Error(t('Invalid branch name: {b}', { b: String(raw).slice(0, 80) }));
+      }
+    }
+    const requested = valid(this.config.branch);
+    const base = valid(this.config.baseBranch);
+
+    let current = (await runCommand(ws, 'git rev-parse --abbrev-ref HEAD')).trim().split('\n')[0];
+    if (!current || current === 'HEAD' || current.startsWith('ERROR')) {
+      await runCommand(ws, 'git checkout -qB harness-main');
+      current = 'harness-main';
+    }
+
+    const branchExists = async (b) =>
+      !(await runCommand(ws, `git rev-parse --verify --quiet ${JSON.stringify('refs/heads/' + b)}`)).includes('[exit code');
+
+    let target = current;
+    if (requested) {
+      if (PROTECTED.has(requested)) {
+        throw new Error(t('Branch "{b}" is protected — Agentura never commits or merges into it; enter a different work branch.', { b: requested }));
+      }
+      if (requested !== current) {
+        const exists = await branchExists(requested);
+        let from = current;
+        if (!exists && base) {
+          if (!(await branchExists(base))) throw new Error(t('Base branch "{b}" does not exist', { b: base }));
+          from = base;
+        }
+        // Uncommitted changes must travel WITH us to the work branch instead of
+        // being committed on the branch we are leaving. create-from-HEAD carries
+        // them natively; any other switch stashes them across.
+        const dirty = (await runCommand(ws, 'git status --porcelain')).trim();
+        const needsStash = !!dirty && !dirty.startsWith('ERROR') && (exists || from !== current);
+        if (needsStash) await runCommand(ws, 'git stash push -q -u -m harness-branch-switch');
+        const out = exists
+          ? await runCommand(ws, `git checkout -q ${JSON.stringify(requested)}`)
+          : await runCommand(ws, `git checkout -qb ${JSON.stringify(requested)} ${JSON.stringify(from)}`);
+        if (needsStash) await runCommand(ws, 'git stash pop -q');
+        if (out.includes('[exit code')) {
+          throw new Error(t('Could not switch to work branch "{b}": {out}', { b: requested, out: out.slice(0, 200) }));
+        }
+        this.logMsg(t('Orchestrator'), exists
+          ? t('🌿 Switched to existing work branch "{b}"', { b: requested })
+          : t('🌿 Created work branch "{b}" from "{base}"', { b: requested, base: from }));
+      }
+      target = requested;
+    } else if (PROTECTED.has(current)) {
+      const nb = `agentura/run-${this.runId || Date.now()}`;
+      await runCommand(ws, `git checkout -qb ${JSON.stringify(nb)}`);
+      this.logMsg(t('Orchestrator'), t('🌿 Protected branch "{b}" — created work branch "{nb}" from it instead', { b: current, nb }));
+      target = nb;
+    }
+    this.mainBranch = target;
   }
 
   ensureWorktree(task) {
