@@ -5,6 +5,9 @@
 // Uses --output-format stream-json so tool calls and interim text are
 // surfaced live in the harness log, same as the raw-API engine.
 import { spawn, execFile } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { t } from './i18n.js';
 
 // A hard wall-clock kill murders perfectly healthy long episodes (deep mobile
@@ -21,12 +24,87 @@ const ENGINE_NOTE =
   'list_dir/read_file/write_file/run_command, use your equivalent tools instead. ' +
   'Work strictly inside the current working directory.';
 
-export function checkClaudeCode() {
+// Launcher resolved once by checkClaudeCode(); episodes spawn
+// [bin, ...pre, ...args]. Plain `spawn('claude')` breaks in two real setups:
+// (1) GUI-launched Electron on macOS inherits a minimal PATH without
+//     Homebrew / npm / nvm dirs, so an installed CLI is invisible;
+// (2) on Windows an npm install is a `claude.cmd` shim that Node refuses to
+//     spawn without a shell (CVE-2024-27980) — and a shell launch mangles
+//     multiline prompt/system argv. So: search the common install locations,
+//     resolve .cmd shims to their underlying cli.js and run that with our own
+//     Node; a shell launch is the LAST resort, and then the prompt travels
+//     via stdin and the system prompt is folded into it (see runCliStream).
+let launcher = { bin: 'claude', pre: [], viaShell: false };
+
+function candidateBins() {
+  const home = os.homedir();
+  if (process.platform === 'win32') {
+    const cands = ['claude.exe', 'claude.cmd', 'claude']; // PATH lookups first
+    if (process.env.APPDATA) {
+      // npm global default prefix on Windows
+      cands.push(path.join(process.env.APPDATA, 'npm', 'claude.cmd'));
+      cands.push(path.join(process.env.APPDATA, 'npm', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'));
+    }
+    cands.push(path.join(home, '.local', 'bin', 'claude.exe')); // native installer
+    return cands;
+  }
+  const cands = ['claude']; // PATH first — respects the user's chosen install
+  for (const dir of [
+    path.join(home, '.local', 'bin'),          // native installer
+    path.join(home, '.claude', 'local'),       // claude-managed install
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    path.join(home, '.npm-global', 'bin'),
+  ]) cands.push(path.join(dir, 'claude'));
+  // nvm: every installed node version has its own global bin
+  try {
+    const nvm = path.join(home, '.nvm', 'versions', 'node');
+    for (const v of fs.readdirSync(nvm)) cands.push(path.join(nvm, v, 'bin', 'claude'));
+  } catch { /* no nvm */ }
+  return cands;
+}
+
+// npm's claude.cmd shim wraps `node ...\node_modules\@anthropic-ai\claude-code\cli.js`
+// — extract that path so episodes can skip both the shim and the shell.
+export function resolveCmdShim(cmdPath) {
+  try {
+    const txt = fs.readFileSync(cmdPath, 'utf8');
+    const m = txt.match(/node_modules[\\/][^"'\r\n]*?cli\.js/i);
+    if (!m) return null;
+    const target = path.join(path.dirname(cmdPath), ...m[0].split(/[\\/]/));
+    fs.accessSync(target);
+    return target;
+  } catch { return null; }
+}
+
+function tryLauncher(l) {
   return new Promise((resolve) => {
-    execFile('claude', ['--version'], { timeout: 10_000 }, (err, stdout) => {
+    execFile(l.bin, [...l.pre, '--version'], { timeout: 10_000, shell: l.viaShell }, (err, stdout) => {
       resolve(err ? null : String(stdout).trim());
     });
   });
+}
+
+export async function checkClaudeCode() {
+  for (const bin of candidateBins()) {
+    const isPath = bin.includes(path.sep);
+    if (isPath) { try { fs.accessSync(bin); } catch { continue; } }
+    const attempts = [];
+    if (/cli\.js$/i.test(bin)) {
+      attempts.push({ bin: process.execPath, pre: [bin], viaShell: false });
+    } else if (/\.cmd$/i.test(bin)) {
+      const cli = isPath ? resolveCmdShim(bin) : null;
+      if (cli) attempts.push({ bin: process.execPath, pre: [cli], viaShell: false });
+      attempts.push({ bin, pre: [], viaShell: true }); // last resort
+    } else {
+      attempts.push({ bin, pre: [], viaShell: false });
+    }
+    for (const l of attempts) {
+      const v = await tryLauncher(l);
+      if (v) { launcher = l; return v; }
+    }
+  }
+  return null;
 }
 
 // Keep tool inputs mostly intact so the live "agent work" view can show the
@@ -52,7 +130,24 @@ function runCliStream(args, cwd, onEvent) {
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
 
-    const child = spawn('claude', args, { cwd, env });
+    // Shell launches (Windows .cmd last resort) must not carry huge multiline
+    // values in argv — ship the prompt via stdin and fold the system prompt
+    // into it. The node+cli.js and direct-binary paths pass args untouched.
+    let spawnArgs = [...launcher.pre, ...args];
+    let stdinPayload = null;
+    if (launcher.viaShell) {
+      const si = spawnArgs.indexOf('--append-system-prompt');
+      let sys = '';
+      if (si >= 0) { sys = spawnArgs[si + 1] || ''; spawnArgs.splice(si, 2); }
+      const pi = spawnArgs.indexOf('-p');
+      if (pi >= 0 && typeof spawnArgs[pi + 1] === 'string') {
+        stdinPayload = (sys ? `[SYSTEM INSTRUCTIONS]\n${sys}\n\n---\n\n` : '') + spawnArgs[pi + 1];
+        spawnArgs.splice(pi + 1, 1); // keep -p; the prompt arrives on stdin
+      }
+    }
+    const child = spawn(launcher.bin, spawnArgs, { cwd, env, shell: launcher.viaShell });
+    if (stdinPayload !== null) child.stdin.write(stdinPayload);
+    child.stdin.end();
     let buf = '';
     let stderr = '';
     let result = null;

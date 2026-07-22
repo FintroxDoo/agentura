@@ -13,7 +13,20 @@ import { checkClaudeCode } from './claude-code.js';
 import { sendEmail } from './mailer.js';
 import { t, getLang, setLang } from './i18n.js';
 
-const claudeCodeVersion = checkClaudeCode(); // Promise<string|null>
+// Claude Code CLI availability. A found CLI is cached for good; a miss is
+// re-checked (15s backoff) so installing the CLI doesn't require a restart.
+let ccCache = { at: 0, version: null, pending: null };
+function getClaudeCode() {
+  if (ccCache.version) return Promise.resolve(ccCache.version);
+  if (ccCache.pending) return ccCache.pending;
+  if (Date.now() - ccCache.at < 15_000) return Promise.resolve(null);
+  ccCache.pending = checkClaudeCode().then((v) => {
+    ccCache = { at: Date.now(), version: v, pending: null };
+    return v;
+  });
+  return ccCache.pending;
+}
+getClaudeCode(); // warm up at boot
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -279,7 +292,7 @@ const server = http.createServer(async (req, res) => {
 
     // Available Claude models + engine availability (+ Kimi)
     if (url.pathname === '/api/models' && req.method === 'GET') {
-      const claudeCode = await claudeCodeVersion;
+      const claudeCode = await getClaudeCode();
       const kimi = { available: !!kimiKey(), models: await listKimiModels() };
       if (!apiKey()) return json(res, 200, { mock: true, models: [], claudeCode, kimi });
       try {
